@@ -1,0 +1,44 @@
+[package]
+name = "sequencer"
+categories.workspace = true
+description = "LON sequencer"
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.102"
+tokio = { default-features = false, features = [
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+], version = "1" }
+url.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+clap = { workspace = true, features = ["derive", "env", "std"] }
+# lb deps
+lb-common-http-client = { workspace = true }
+lb-core = { workspace = true }
+lb-key-management-system-service = { workspace = true }
+logos-blockchain-zone-sdk = { path = "../logos-blockchain/zone-sdk" }
+# pyth fetch
+reqwest.workspace = true
+reqwest-eventsource = "0.6"
+futures.workspace = true
+dashmap = "6.2.1"
+uuid = { version = "1.23.3", features = ["v4", "serde"] }
+# internal
+common =  { path = "../common" }
