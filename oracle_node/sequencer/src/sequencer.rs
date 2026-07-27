@@ -26,6 +26,7 @@ use common::{
 };
 use prost::Message;
 use crate::lon::PriceObservation;
+use pyth_sdk::Price;
 
 pub struct Sequencer {
     sequencer: ZoneSequencer<NodeHttpClient>,
@@ -100,12 +101,19 @@ impl Sequencer {
                 // store it
                 // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
                 // TODO: convert price_latest into PriceObservation
+                println!("price_latest: {:?}", price_latest);
+                let scaled_pyth_price = Price {
+                    price: price_latest.price.price.parse::<i64>().unwrap(),
+                    conf: price_latest.price.conf.parse::<u64>().unwrap(),
+                    expo: price_latest.price.expo,
+                    publish_time: price_latest.price.publish_time,
+                }.scale_to_exponent(-6).expect("Price exceeds maximum representable bounds for target exponent");
                 let obs = PriceObservation {
-                    feed_id: "BTC/USDT".to_string(),
-                    price: 65000_000_000,
+                    feed_id: price_latest.id.to_uppercase(),
+                    price: scaled_pyth_price.price,
                     decimals: 6,
-                    round: 1045,
-                    timestamp: 1718280000000,
+                    round: 1045, // TODO
+                    timestamp: price_latest.price.publish_time,
                     oracle_id: vec![1, 2, 3, 4], // Your 32-byte pubkey
                     signature: vec![5, 6, 7],    // Your schnorr sig
                     membership_proof: vec![8, 9],
