@@ -40,5 +40,11 @@ reqwest-eventsource = "0.6"
 futures.workspace = true
 dashmap = "6.2.1"
 uuid = { version = "1.23.3", features = ["v4", "serde"] }
+# lon rfc
+prost = "0.14"
+
 # internal
 common =  { path = "../common" }
+
+[build-dependencies]
+prost-build = "0.14"

@@ -1,22 +1,31 @@
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-use anyhow::anyhow;
+// use anyhow::anyhow;
 use dashmap::DashMap;
 use rand::Rng;
-use tokio::sync::mpsc::UnboundedSender;
+// use tokio::sync::mpsc::UnboundedSender;
 use url::Url;
 use logos_blockchain_zone_sdk::{
     adapter::NodeHttpClient,
-    sequencer::{Event, SequencerCheckpoint, SequencerHandle, SequencerClient, ZoneSequencer},
+    sequencer::{
+        Event, SequencerCheckpoint,
+        // SequencerHandle,
+        SequencerClient, ZoneSequencer
+    },
 };
 use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
-use lb_core::codec::SerializeOp;
+// use lb_core::codec::SerializeOp;
 use lb_core::mantle::ops::channel::{ChannelId, inscribe::Inscription};
 use lb_core::mantle::ops::channel::inscribe::MAX_BYTES;
 use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key};
 use crate::zone_state::InMemoryZoneState;
-use common::{ParsedUpdate, PriceInfo};
+use common::{
+    ParsedUpdate,
+    // PriceInfo
+};
+use prost::Message;
+use crate::lon::PriceObservation;
 
 pub struct Sequencer {
     sequencer: ZoneSequencer<NodeHttpClient>,
@@ -89,11 +98,23 @@ impl Sequencer {
                 let Some(price_latest) = prices.last() else { continue };
 
                 // store it
-                let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
-
+                // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
+                // TODO: convert price_latest into PriceObservation
+                let obs = PriceObservation {
+                    feed_id: "BTC/USDT".to_string(),
+                    price: 65000_000_000,
+                    decimals: 6,
+                    round: 1045,
+                    timestamp: 1718280000000,
+                    oracle_id: vec![1, 2, 3, 4], // Your 32-byte pubkey
+                    signature: vec![5, 6, 7],    // Your schnorr sig
+                    membership_proof: vec![8, 9],
+                };
+                let payload_bytes = obs.encode_to_vec();
+                println!("payload bytes len: {}", payload_bytes.len());
                 println!("max bytes for inscription: {:?}", MAX_BYTES);
 
-                let inscription = Inscription::try_from(prices_latest_json.to_bytes().unwrap().to_vec())
+                let inscription = Inscription::try_from(payload_bytes)
                     .map_err(|e| SequencerError::InscriptionTooLarge(e.to_string()))
                     .unwrap();
 
@@ -140,8 +161,8 @@ fn load_or_create_signing_key(path: &Path) -> Ed25519Key {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SequencerError {
-    #[error("URL parse error: {0}")]
-    Url(String),
+    // #[error("URL parse error: {0}")]
+    // Url(String),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Inscription too large: {0}")]
@@ -150,19 +171,17 @@ pub enum SequencerError {
 
 fn handle_event(
     event: Event,
-    sequencer: &mut ZoneSequencer<NodeHttpClient>,
-    state: &mut InMemoryZoneState,
+    _sequencer: &mut ZoneSequencer<NodeHttpClient>,
+    _state: &mut InMemoryZoneState,
     checkpoint_path: &str,
 ) {
     match event {
         Event::Ready => {
             println!("Sequencer ready");
         },
-        Event::BlocksProcessed { checkpoint, channel_update, finalized } => {
+        Event::BlocksProcessed { checkpoint, channel_update: _channel_update, finalized: _finalized } => {
             println!("BlocksProcessed");
-
             save_checkpoint(Path::new(checkpoint_path), &checkpoint);
-
         },
         Event::MempoolPending(_) | Event::TurnNotification { .. } => {}
     }

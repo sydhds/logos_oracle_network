@@ -4,10 +4,16 @@ mod monitor;
 mod zone_state;
 mod args;
 
+pub mod lon {
+    // Include the generated rust module
+    // The filename matches your proto package name
+    include!(concat!(env!("OUT_DIR"), "/lon.rs"));
+}
+
 use anyhow::Context;
 use clap::Parser;
 use dashmap::DashMap;
-use futures::AsyncWriteExt;
+// use futures::AsyncWriteExt;
 use tokio::task::JoinSet;
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;

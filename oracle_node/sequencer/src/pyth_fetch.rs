@@ -3,7 +3,7 @@ use reqwest::Client;
 use reqwest_eventsource::{Event, EventSource};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{sleep, Duration};
-use serde::{Serialize, Deserialize};
+// use serde::{Serialize, Deserialize};
 
 use common::HermesPriceEvent;
 
