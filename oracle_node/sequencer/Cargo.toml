@@ -40,9 +40,10 @@ reqwest-eventsource = "0.6"
 futures.workspace = true
 dashmap = "6.2.1"
 uuid = { version = "1.23.3", features = ["v4", "serde"] }
-pyth-sdk = "0.8"
 # lon rfc
-prost = "0.14"
+prost = "0.14" # grpc
+pyth-sdk = "0.8" # price decimal conversion
+secp256k1 = { version = "0.29", features = ["rand", "hashes"] } # BIP-340 x-only
 
 # internal
 common =  { path = "../common" }
