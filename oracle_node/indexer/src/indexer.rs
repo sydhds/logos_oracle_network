@@ -8,6 +8,12 @@ use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 use reqwest::Url;
 use tracing::{error, info};
 use common::ParsedUpdate;
+use crate::indexer::lon::PriceObservation;
+use prost::Message;
+
+pub mod lon {
+    include!(concat!(env!("OUT_DIR"), "/lon.rs"));
+}
 
 pub struct Indexer {
     zone_indexer: ZoneIndexer<NodeHttpClient>,
@@ -73,48 +79,16 @@ impl Indexer {
                 let logos_blockchain_zone_sdk::ZoneMessage::Block(zone_block) = zone_msg else {
                     continue;
                 };
-                /*
-                let sql_text = match String::from_utf8(Vec::from(zone_block.data)) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!("Zone block data is not valid UTF-8: {e}");
+
+                let data = Vec::from(zone_block.data);
+                let price_obs = match PriceObservation::decode(data.as_slice()) {
+                    Ok(obs) => obs,
+                    Err(err) => {
+                        eprint!("Error while decoding zone data: {}", err);
                         continue;
                     }
                 };
-                */
-                let price_latest_json = match String::from_utf8(Vec::from(zone_block.data)) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!("Zone block data is not valid UTF-8: {e}");
-                        continue;
-                    }
-                };
-                let price_latest: ParsedUpdate = serde_json::from_str(&price_latest_json).unwrap();
-
-                println!("[Indexer] price latest: {:?}", price_latest);
-
-                /*
-                let statements: Vec<&str> = sql_text
-                    .lines()
-                    .map(|l: &str| l.trim().trim_end_matches(';').trim())
-                    .filter(|s: &&str| !s.is_empty())
-                    .collect();
-
-                if statements.is_empty() {
-                    continue;
-                }
-                */
-
-                /*
-                info!("Applying {} SQL statement(s)", statements.len());
-
-                for stmt in &statements {
-                    if let Err(e) = db.execute_batch(stmt) {
-                        error!("Failed to execute SQL '{}': {e}", stmt);
-                    }
-                }
-                info!("Applied {} statement(s)", statements.len());
-                */
+                println!("[Indexer] price observation: {:?}", price_obs);
             }
 
             error!("Zone block stream ended, reconnecting...");

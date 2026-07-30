@@ -20,7 +20,7 @@ pub async fn run(args: IndexerArgs) -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    info!("Sqlite Indexer starting up...");
+    info!("Oracle Indexer starting up...");
     info!("  Logos blockchain Node: {}", args.node_url);
 
     let indexer = match Indexer::new(

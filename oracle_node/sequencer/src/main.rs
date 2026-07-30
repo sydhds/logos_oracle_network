@@ -5,8 +5,6 @@ mod zone_state;
 mod args;
 
 pub mod lon {
-    // Include the generated rust module
-    // The filename matches your proto package name
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
 }
 
@@ -38,6 +36,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     let mut sequencer = Sequencer::new(
         &args.node_url,
+        &args.oracle_key_path,
         &args.key_path,
         args.node_auth_username,
         args.node_auth_password,
