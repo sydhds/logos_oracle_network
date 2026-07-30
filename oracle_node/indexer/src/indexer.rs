@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::time::Duration;
 use anyhow::{anyhow, Context};
 use futures::StreamExt as _;
 use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
@@ -7,92 +9,173 @@ use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
 use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 use reqwest::Url;
 use tracing::{error, info};
-use common::ParsedUpdate;
+use common::{ParsedUpdate, TimeInfo};
 use crate::indexer::lon::PriceObservation;
 use prost::Message;
+use tokio::sync::{mpsc, watch};
+use tokio::task::JoinHandle;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
 }
 
 pub struct Indexer {
-    zone_indexer: ZoneIndexer<NodeHttpClient>,
-}
-
-fn parse_channel_id(channel_id_str: &str) -> anyhow::Result<ChannelId> {
-    let decoded = hex::decode(channel_id_str).map_err(|_| {
-        anyhow!(format!("INDEXER_CHANNEL_ID must be a valid hex string, got: '{channel_id_str}'"))
-    })?;
-    let channel_bytes: [u8; 32] = decoded.try_into().map_err(|v: Vec<u8>| {
-        anyhow!(format!(
-            "INDEXER_CHANNEL_ID must be exactly 64 hex characters (32 bytes), got {} characters ({} bytes)",
-            v.len() * 2,
-            v.len()
-        ))
-    })?;
-    Ok(ChannelId::from(channel_bytes))
+    node_url: Url,
+    node_auth_username: Option<String>,
+    node_auth_password: Option<String>,
+    time_rx: watch::Receiver<Option<TimeInfo>>,
+    channels_rx: watch::Receiver<HashSet<ChannelId>>,
+    active_workers: HashMap<ChannelId, JoinHandle<()>>,
 }
 
 impl Indexer {
+
     pub fn new(
-        // db_path: &str,
         node_endpoint: &str,
-        channel_path: &str,
         node_auth_username: Option<String>,
         node_auth_password: Option<String>,
+        time_rx: watch::Receiver<Option<TimeInfo>>,
+        channels_rx: watch::Receiver<HashSet<ChannelId>>,
     ) -> anyhow::Result<Self> {
         let node_url = Url::parse(node_endpoint)?;
-            // .map_err(|e| anye.to_string()))?;
-
-        let basic_auth = node_auth_username
-            .map(|username| BasicAuthCredentials::new(username, node_auth_password));
-
-        let channel_id_str = fs::read_to_string(channel_path)
-            .context(format!("Failed to read channel path '{channel_path}'"))
-            ?;
-        let channel_id = parse_channel_id(channel_id_str.trim())?;
-
-        info!("Channel ID: {}", hex::encode(channel_id.as_ref()));
-
-        let node = NodeHttpClient::new(CommonHttpClient::new(basic_auth), node_url);
-        let zone_indexer = ZoneIndexer::new(channel_id, node);
-
-        Ok(Self { zone_indexer })
+        Ok(Self {
+            node_url,
+            node_auth_username,
+            node_auth_password,
+            time_rx,
+            channels_rx,
+            active_workers: HashMap::new(),
+        })
     }
 
-    pub async fn run(self) {
+    pub async fn run(mut self) {
+        let (tx, mut rx) = mpsc::unbounded_channel::<(ChannelId, PriceObservation)>();
+        let mut last_processed_slot = 0;
+        let mut current_channels = HashSet::new();
+
+        info!("Starting dynamic indexer coordinator...");
 
         loop {
-            info!("Connecting to zone block stream...");
-            let stream = match self.zone_indexer.follow().await {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("Failed to connect to block stream: {e}");
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    continue;
+            tokio::select! {
+                // Listen for TimeInfo updates
+                Ok(()) = self.time_rx.changed() => {
+
+                    let current_slot = if let Some(info) = self.time_rx.borrow().as_ref() {
+                        info.current_slot
+                    } else {
+                        continue;
+                    };
+
+                    if current_slot > last_processed_slot {
+                        info!("New slot {}. Updating active channels...", current_slot);
+                        last_processed_slot = current_slot;
+
+                        // Instantly grab the latest polled channels without network I/O
+                        let latest_channels = self.channels_rx.borrow().clone();
+
+                        // News channels -> spawn tokio task
+                        for new_id in latest_channels.difference(&current_channels) {
+                            info!("Spawning worker for new channel: {}", hex::encode(new_id.as_ref()));
+                            let handle = self.spawn_channel_worker(new_id.clone(), tx.clone());
+                            self.active_workers.insert(new_id.clone(), handle);
+                        }
+
+                        // OLD channels -> abort tokio task
+                        for old_id in current_channels.difference(&latest_channels) {
+                            info!("Removing worker for deleted channel: {}", hex::encode(old_id.as_ref()));
+                            if let Some(handle) = self.active_workers.remove(old_id) {
+                                handle.abort();
+                            }
+                        }
+
+                        // C. Swap the state
+                        current_channels = latest_channels;
+                    }
+                },
+                Some((channel_id, price_obs)) = rx.recv() => {
+                    // Received channel_id & PriceObservation from workers
+                    let hex_id = hex::encode(channel_id.as_ref());
+                    println!("[Slot {} | Channel {}] Obs: {:?}", last_processed_slot, hex_id, price_obs);
+                    // TODO: Process the observations
                 }
-            };
-            info!("Connected to zone block stream");
+            }
+        }
+    }
 
-            futures::pin_mut!(stream);
-            while let Some(zone_msg) = stream.next().await {
-                let logos_blockchain_zone_sdk::ZoneMessage::Block(zone_block) = zone_msg else {
-                    continue;
-                };
+    fn spawn_channel_worker(
+        &self,
+        channel_id: ChannelId,
+        tx: mpsc::UnboundedSender<(ChannelId, PriceObservation)>
+    ) -> JoinHandle<()> {
 
-                let data = Vec::from(zone_block.data);
-                let price_obs = match PriceObservation::decode(data.as_slice()) {
-                    Ok(obs) => obs,
-                    Err(err) => {
-                        eprint!("Error while decoding zone data: {}", err);
+        // Build a ZoneIndexer (one per channel_id)
+        let basic_auth = self.node_auth_username.clone()
+            .map(|username| BasicAuthCredentials::new(username, self.node_auth_password.clone()));
+        let common_client = CommonHttpClient::new(basic_auth);
+        let node_client = NodeHttpClient::new(common_client, self.node_url.clone());
+        let zone_indexer = ZoneIndexer::new(channel_id.clone(), node_client);
+
+        tokio::spawn(async move {
+            loop {
+                let stream = match zone_indexer.follow().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("Worker {} failed: {e}", hex::encode(channel_id.as_ref()));
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                         continue;
                     }
                 };
-                println!("[Indexer] price observation: {:?}", price_obs);
-            }
 
-            error!("Zone block stream ended, reconnecting...");
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        }
+                futures::pin_mut!(stream);
+                while let Some(zone_msg) = stream.next().await {
+                    let logos_blockchain_zone_sdk::ZoneMessage::Block(zone_block) = zone_msg else {
+                        continue;
+                    };
+
+                    let data = Vec::from(zone_block.data);
+                    if let Ok(obs) = PriceObservation::decode(data.as_slice()) {
+                        if tx.send((channel_id.clone(), obs)).is_err() {
+                            return; // Coordinator shut down
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        })
     }
+
+}
+
+pub fn spawn_channel_discoverer(
+    poll_interval: Duration,
+) -> watch::Receiver<HashSet<ChannelId>> {
+    let (tx, rx) = watch::channel(HashSet::new());
+
+    tokio::spawn(async move {
+        loop {
+            // MOCK: Replace with your actual smart contract/state query
+            match mock_query_contract_for_channels().await {
+                Ok(channels_vec) => {
+                    let channels_set: HashSet<ChannelId> = channels_vec.into_iter().collect();
+
+                    // Push the new state. Receivers can grab this instantly without blocking.
+                    if tx.send(channels_set).is_err() {
+                        info!("Channel discoverer exiting: all receivers dropped.");
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to query channels from state: {}", e);
+                }
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+    });
+
+    rx
+}
+
+async fn mock_query_contract_for_channels() -> anyhow::Result<Vec<ChannelId>> {
+    // TODO
+    Ok(vec![])
 }

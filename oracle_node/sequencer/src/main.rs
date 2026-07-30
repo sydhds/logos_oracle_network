@@ -3,21 +3,20 @@ mod pyth_fetch;
 mod monitor;
 mod zone_state;
 mod args;
-mod time_fetch;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
 }
 
+use crate::args::SequencerArgs;
+use crate::monitor::PriceMonitor;
+use crate::pyth_fetch::fetch_price;
+use crate::sequencer::Sequencer;
 use anyhow::Context;
 use clap::Parser;
 use dashmap::DashMap;
 // use futures::AsyncWriteExt;
 use tokio::task::JoinSet;
-use crate::args::SequencerArgs;
-use crate::monitor::PriceMonitor;
-use crate::pyth_fetch::fetch_price;
-use crate::sequencer::Sequencer;
 
 #[tokio::main]
 async fn main() {

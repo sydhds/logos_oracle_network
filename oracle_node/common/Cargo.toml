@@ -14,3 +14,18 @@ workspace = true
 
 [dependencies]
 serde = { workspace = true, default-features = true, features = ["derive"] }
+serde_json.workspace = true
+reqwest = { workspace = true, default-features = false, features = ["json"]}
+tokio = { default-features = false, features = [
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+], version = "1" }
+lb-http-api-common = { workspace = true }
+
+[dev-dependencies]
+wiremock = "0.6"

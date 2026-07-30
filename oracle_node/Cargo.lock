@@ -1019,7 +1019,12 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 name = "common"
 version = "0.2.1"
 dependencies = [
+ "logos-blockchain-http-api-common",
+ "reqwest",
  "serde",
+ "serde_json",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]
@@ -6074,7 +6079,6 @@ dependencies = [
  "futures",
  "logos-blockchain-common-http-client",
  "logos-blockchain-core",
- "logos-blockchain-http-api-common",
  "logos-blockchain-key-management-system-service",
  "logos-blockchain-zone-sdk",
  "prost 0.14.4",
@@ -6090,7 +6094,6 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
- "wiremock",
 ]
 
 [[package]]
