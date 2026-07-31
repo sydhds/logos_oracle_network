@@ -1,19 +1,19 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::collections::hash_map::Entry;
 use std::time::Duration;
-use anyhow::{anyhow, Context};
 use futures::StreamExt as _;
 use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
 use lb_core::mantle::ops::channel::ChannelId;
 use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
 use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 use reqwest::Url;
-use tracing::{error, info};
-use common::{ParsedUpdate, TimeInfo};
+use tracing::{error, info, warn};
+use common::TimeInfo;
 use crate::indexer::lon::PriceObservation;
 use prost::Message;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
@@ -26,6 +26,7 @@ pub struct Indexer {
     time_rx: watch::Receiver<Option<TimeInfo>>,
     channels_rx: watch::Receiver<HashSet<ChannelId>>,
     active_workers: HashMap<ChannelId, JoinHandle<()>>,
+    feed_workers: HashMap<String, mpsc::Sender<(ChannelId, PriceObservation)>>,
 }
 
 impl Indexer {
@@ -45,6 +46,8 @@ impl Indexer {
             time_rx,
             channels_rx,
             active_workers: HashMap::new(),
+            // TODO: maybe create feed workers for some known price id
+            feed_workers: HashMap::new(),
         })
     }
 
@@ -88,15 +91,39 @@ impl Indexer {
                             }
                         }
 
-                        // C. Swap the state
+                        // Update current list of channel ids
                         current_channels = latest_channels;
                     }
                 },
                 Some((channel_id, price_obs)) = rx.recv() => {
+
                     // Received channel_id & PriceObservation from workers
                     let hex_id = hex::encode(channel_id.as_ref());
                     println!("[Slot {} | Channel {}] Obs: {:?}", last_processed_slot, hex_id, price_obs);
-                    // TODO: Process the observations
+
+                    let feed_id = price_obs.feed_id.clone();
+
+                    // Get the queue to send our PriceObservation to the corresponding feed workers
+                    let mut tx = match self.feed_workers.entry(feed_id.clone()) {
+                        Entry::Occupied(entry) => entry.into_mut().clone(),
+                        Entry::Vacant(entry) => {
+                            info!("Spawning new processor for feed: {}", feed_id);
+                            let new_tx = spawn_feed_worker(feed_id.clone(), self.channels_rx.clone());
+                            entry.insert(new_tx.clone());
+                            new_tx
+                        }
+                    };
+
+                    // Now send our PriceObservation
+                    if tx.send((channel_id.clone(), price_obs.clone())).await.is_err() {
+                        // If send fails, the worker timed out and exited due to staleness.
+                        // We need to spawn a fresh one and retry.
+                        info!("Worker for {} was stale. Respawning.", feed_id);
+                        tx = spawn_feed_worker(feed_id.clone(), self.channels_rx.clone());
+                        self.feed_workers.insert(feed_id, tx.clone());
+                        // Retry on the send on the newly created feed_worker
+                        let _ = tx.send((channel_id, price_obs)).await; // TODO: report and log error here
+                    }
                 }
             }
         }
@@ -173,6 +200,51 @@ pub fn spawn_channel_discoverer(
     });
 
     rx
+}
+
+fn spawn_feed_worker(
+    feed_id: String,
+    channels_rx: watch::Receiver<HashSet<ChannelId>>,
+) -> mpsc::Sender<(ChannelId, PriceObservation)> {
+    // Buffer up to 100 observations per feed
+    let (tx, mut rx) = mpsc::channel::<(ChannelId, PriceObservation)>(100);
+
+    tokio::spawn(async move {
+        info!("Started feed worker for {}", feed_id);
+
+        // Stale timeout: 10 minutes
+        let idle_timeout = Duration::from_secs(600);
+
+        loop {
+            // Wait for a message, but timeout if idle too long
+            match timeout(idle_timeout, rx.recv()).await {
+                Ok(Some((channel_id, obs))) => {
+                    // FILTER: Ensure the channel is STILL active.
+                    // This prevents processing messages that were buffered in the channel
+                    // just before the ZoneIndexer worker was aborted on a slot change.
+                    if !channels_rx.borrow().contains(&channel_id) {
+                        tracing::debug!("Discarding obs from inactive channel: {}", hex::encode(channel_id.as_ref()));
+                        continue;
+                    }
+
+                    println!("[Feed {}] processing valid observation: {}", feed_id, obs.price);
+                    // TODO: mean computing...
+
+                }
+                Ok(None) => {
+                    warn!("Main indexer loop dropped the sender, time to exit...");
+                    break;
+                }
+                Err(_) => {
+                    // Timeout handling
+                    info!("Feed worker for {} timed out due to inactivity. Shutting down.", feed_id);
+                    break;
+                }
+            }
+        }
+    });
+
+    tx
 }
 
 async fn mock_query_contract_for_channels() -> anyhow::Result<Vec<ChannelId>> {
