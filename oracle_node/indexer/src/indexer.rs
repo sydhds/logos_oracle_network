@@ -79,7 +79,23 @@ impl Indexer {
                         // News channels -> spawn tokio task
                         for new_id in latest_channels.difference(&current_channels) {
                             info!("Spawning worker for new channel: {}", hex::encode(new_id.as_ref()));
-                            let handle = self.spawn_channel_worker(new_id.clone(), tx.clone());
+                            // let handle = self.spawn_channel_worker(new_id.clone(), tx.clone());
+
+                            let node_url = self.node_url.clone();
+                            let node_auth_username = self.node_auth_username.clone();
+                            let node_auth_password = self.node_auth_password.clone();
+                            let tx = tx.clone();
+                            let new_id = new_id.clone();
+                            let handle = tokio::spawn(async move {
+                                channel_worker(
+                                    node_url,
+                                    node_auth_username,
+                                    node_auth_password,
+                                    new_id,
+                                    tx
+                                ).await
+                            });
+
                             self.active_workers.insert(new_id.clone(), handle);
                         }
 
@@ -108,9 +124,14 @@ impl Indexer {
                         Entry::Occupied(entry) => entry.into_mut().clone(),
                         Entry::Vacant(entry) => {
                             info!("Spawning new processor for feed: {}", feed_id);
-                            let new_tx = spawn_feed_worker(feed_id.clone(), self.channels_rx.clone());
-                            entry.insert(new_tx.clone());
-                            new_tx
+                            let feed_id = feed_id.clone();
+                            let channels_rx = self.channels_rx.clone();
+                            let (worker_tx, worker_rx) = mpsc::channel(100);
+                            let _worker_handle = tokio::spawn(async move {
+                                price_feed_worker(feed_id, channels_rx, worker_rx).await
+                            });
+                            entry.insert(worker_tx.clone());
+                            worker_tx
                         }
                     };
 
@@ -119,8 +140,13 @@ impl Indexer {
                         // If send fails, the worker timed out and exited due to staleness.
                         // We need to spawn a fresh one and retry.
                         info!("Worker for {} was stale. Respawning.", feed_id);
-                        tx = spawn_feed_worker(feed_id.clone(), self.channels_rx.clone());
-                        self.feed_workers.insert(feed_id, tx.clone());
+                        let feed_id = feed_id.clone();
+                        let channels_rx = self.channels_rx.clone();
+                        let (worker_tx, worker_rx) = mpsc::channel(100);
+                        let _worker_handle = tokio::spawn(async move {
+                            price_feed_worker(feed_id, channels_rx, worker_rx).await
+                        });
+                        self.feed_workers.insert(price_obs.feed_id.clone(), tx.clone());
                         // Retry on the send on the newly created feed_worker
                         let _ = tx.send((channel_id, price_obs)).await; // TODO: report and log error here
                     }
@@ -128,123 +154,112 @@ impl Indexer {
             }
         }
     }
+}
 
-    fn spawn_channel_worker(
-        &self,
-        channel_id: ChannelId,
-        tx: mpsc::UnboundedSender<(ChannelId, PriceObservation)>
-    ) -> JoinHandle<()> {
+/// PriceObservation worker (fetch from logos blockchain then send to price_feed_worker)
+async fn channel_worker(
+    node_url: Url,
+    node_auth_username: Option<String>,
+    node_auth_password: Option<String>,
+    channel_id: ChannelId,
+    tx: mpsc::UnboundedSender<(ChannelId, PriceObservation)>)
+{
+    // Build a ZoneIndexer (one per channel_id)
+    let basic_auth = node_auth_username
+        .map(|username| BasicAuthCredentials::new(username, node_auth_password));
 
-        // Build a ZoneIndexer (one per channel_id)
-        let basic_auth = self.node_auth_username.clone()
-            .map(|username| BasicAuthCredentials::new(username, self.node_auth_password.clone()));
-        let common_client = CommonHttpClient::new(basic_auth);
-        let node_client = NodeHttpClient::new(common_client, self.node_url.clone());
-        let zone_indexer = ZoneIndexer::new(channel_id.clone(), node_client);
+    let common_client = CommonHttpClient::new(basic_auth);
+    let node_client = NodeHttpClient::new(common_client, node_url);
+    let zone_indexer = ZoneIndexer::new(channel_id.clone(), node_client);
 
-        tokio::spawn(async move {
-            loop {
-                let stream = match zone_indexer.follow().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!("Worker {} failed: {e}", hex::encode(channel_id.as_ref()));
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
-
-                futures::pin_mut!(stream);
-                while let Some(zone_msg) = stream.next().await {
-                    let logos_blockchain_zone_sdk::ZoneMessage::Block(zone_block) = zone_msg else {
-                        continue;
-                    };
-
-                    let data = Vec::from(zone_block.data);
-                    if let Ok(obs) = PriceObservation::decode(data.as_slice()) {
-                        if tx.send((channel_id.clone(), obs)).is_err() {
-                            return; // Coordinator shut down
-                        }
-                    }
-                }
+    loop {
+        let stream = match zone_indexer.follow().await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Worker {} failed: {e}", hex::encode(channel_id.as_ref()));
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
             }
-        })
+        };
+
+        futures::pin_mut!(stream);
+        while let Some(zone_msg) = stream.next().await {
+            let logos_blockchain_zone_sdk::ZoneMessage::Block(zone_block) = zone_msg else {
+                continue;
+            };
+
+            let data = Vec::from(zone_block.data);
+            if let Ok(obs) = PriceObservation::decode(data.as_slice()) {
+                if tx.send((channel_id.clone(), obs)).is_err() {
+                    return; // Coordinator shut down
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
 }
 
-pub fn spawn_channel_discoverer(
-    poll_interval: Duration,
-) -> watch::Receiver<HashSet<ChannelId>> {
-    let (tx, rx) = watch::channel(HashSet::new());
+/// Query SC for updated channel ids
+pub async fn channel_discover(poll_interval: Duration, tx: watch::Sender<HashSet<ChannelId>>) {
+    loop {
+        // FIXME: query the SC for updated channel ids
+        match mock_query_contract_for_channels().await {
+            Ok(channels_vec) => {
+                let channels_set: HashSet<ChannelId> = channels_vec.into_iter().collect();
 
-    tokio::spawn(async move {
-        loop {
-            // MOCK: Replace with your actual smart contract/state query
-            match mock_query_contract_for_channels().await {
-                Ok(channels_vec) => {
-                    let channels_set: HashSet<ChannelId> = channels_vec.into_iter().collect();
-
-                    // Push the new state. Receivers can grab this instantly without blocking.
-                    if tx.send(channels_set).is_err() {
-                        info!("Channel discoverer exiting: all receivers dropped.");
-                        break;
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to query channels from state: {}", e);
+                // Push the new state. Receivers can grab this instantly without blocking.
+                if tx.send(channels_set).is_err() {
+                    info!("Channel discoverer exiting: all receivers dropped.");
+                    break;
                 }
             }
-            tokio::time::sleep(poll_interval).await;
+            Err(e) => {
+                error!("Failed to query channels from state: {}", e);
+            }
         }
-    });
-
-    rx
+        tokio::time::sleep(poll_interval).await;
+    }
 }
 
-fn spawn_feed_worker(
+/// A worker for a price feed
+async fn price_feed_worker(
     feed_id: String,
     channels_rx: watch::Receiver<HashSet<ChannelId>>,
-) -> mpsc::Sender<(ChannelId, PriceObservation)> {
-    // Buffer up to 100 observations per feed
-    let (tx, mut rx) = mpsc::channel::<(ChannelId, PriceObservation)>(100);
+    mut price_obs_rx: mpsc::Receiver<(ChannelId, PriceObservation)>,
+) {
+    info!("Started feed worker for {}", feed_id);
 
-    tokio::spawn(async move {
-        info!("Started feed worker for {}", feed_id);
+    // Stale timeout: 10 minutes
+    let idle_timeout = Duration::from_secs(600);
 
-        // Stale timeout: 10 minutes
-        let idle_timeout = Duration::from_secs(600);
-
-        loop {
-            // Wait for a message, but timeout if idle too long
-            match timeout(idle_timeout, rx.recv()).await {
-                Ok(Some((channel_id, obs))) => {
-                    // FILTER: Ensure the channel is STILL active.
-                    // This prevents processing messages that were buffered in the channel
-                    // just before the ZoneIndexer worker was aborted on a slot change.
-                    if !channels_rx.borrow().contains(&channel_id) {
-                        tracing::debug!("Discarding obs from inactive channel: {}", hex::encode(channel_id.as_ref()));
-                        continue;
-                    }
-
-                    println!("[Feed {}] processing valid observation: {}", feed_id, obs.price);
-                    // TODO: mean computing...
-
+    loop {
+        // Wait for a message, but timeout if idle too long
+        match timeout(idle_timeout, price_obs_rx.recv()).await {
+            Ok(Some((channel_id, obs))) => {
+                // FILTER: Ensure the channel is STILL active.
+                // This prevents processing messages that were buffered in the channel
+                // just before the ZoneIndexer worker was aborted on a slot change.
+                if !channels_rx.borrow().contains(&channel_id) {
+                    tracing::debug!("Discarding worker from inactive channel: {}", hex::encode(channel_id.as_ref()));
+                    continue;
                 }
-                Ok(None) => {
-                    warn!("Main indexer loop dropped the sender, time to exit...");
-                    break;
-                }
-                Err(_) => {
-                    // Timeout handling
-                    info!("Feed worker for {} timed out due to inactivity. Shutting down.", feed_id);
-                    break;
-                }
+
+                println!("[Feed {}] processing valid observation: {}", feed_id, obs.price);
+                // TODO: mean computing...
+
+            }
+            Ok(None) => {
+                warn!("Main indexer loop dropped the sender, time to exit...");
+                break;
+            }
+            Err(_) => {
+                // Timeout handling
+                info!("Feed worker for {} timed out due to inactivity. Shutting down.", feed_id);
+                break;
             }
         }
-    });
-
-    tx
+    }
 }
 
 async fn mock_query_contract_for_channels() -> anyhow::Result<Vec<ChannelId>> {

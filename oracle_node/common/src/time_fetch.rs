@@ -19,53 +19,43 @@ pub struct TimeInfo {
     pub current_epoch: u32,
 }
 
-pub fn time_poller(
+pub async fn time_info_poll(
     api_base_url: String,
-    poll_interval: Duration
-) -> watch::Receiver<Option<TimeInfo>> {
+    poll_interval: Duration,
+    tx: watch::Sender<Option<TimeInfo>>,
+) {
 
-    println!("Starting time fetch");
-    println!("api_base_url: {}", api_base_url);
-    println!("path: {}", paths::TIME_INFO);
+    let client = Client::new();
+    let url = format!("{}{}", api_base_url.trim_end_matches('/'), paths::TIME_INFO);
+    println!("url: {}", url);
 
-    // Create the channel with an initial empty state
-    let (tx, rx) = watch::channel(None);
-
-    tokio::spawn(async move {
-        let client = Client::new();
-        let url = format!("{}{}", api_base_url.trim_end_matches('/'), paths::TIME_INFO);
-        println!("url: {}", url);
-
-        loop {
-            match client.get(&url).send().await {
-                Ok(response) if response.status().is_success() => {
-                    match response.json::<TimeInfo>().await {
-                        Ok(time_info) => {
-                            if tx.send(Some(time_info)).is_err() {
-                                // If this fails, it means all receivers have been dropped,
-                                // so we can safely exit the background loop.
-                                eprintln!("Time poller exiting: all receivers dropped.");
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to parse TimeInfo JSON: {}", e);
+    loop {
+        match client.get(&url).send().await {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<TimeInfo>().await {
+                    Ok(time_info) => {
+                        if tx.send(Some(time_info)).is_err() {
+                            // If this fails, it means all receivers have been dropped,
+                            // so we can safely exit the background loop.
+                            eprintln!("Time poller exiting: all receivers dropped.");
+                            break;
                         }
                     }
-                }
-                Ok(response) => {
-                    eprintln!("Time API returned an error status: {}", response.status());
-                }
-                Err(e) => {
-                    eprintln!("Failed to reach the Time API: {}", e);
+                    Err(e) => {
+                        eprintln!("Failed to parse TimeInfo JSON: {}", e);
+                    }
                 }
             }
-
-            sleep(poll_interval).await;
+            Ok(response) => {
+                eprintln!("Time API returned an error status: {}", response.status());
+            }
+            Err(e) => {
+                eprintln!("Failed to reach the Time API: {}", e);
+            }
         }
-    });
 
-    rx
+        sleep(poll_interval).await;
+    }
 }
 
 #[cfg(test)]
@@ -103,7 +93,10 @@ mod tests {
         println!("mock_url: {}", mock_url);
 
         // Start time poller
-        let time_rx = time_poller(mock_server.uri(), Duration::from_secs(1));
+        let (time_tx, time_rx) = watch::channel::<Option<TimeInfo>>(None);
+        let _handle = tokio::spawn(async move {
+            time_info_poll(mock_server.uri(), Duration::from_secs(1), time_tx).await
+        });
 
         // Wait until the poller fetches the first valid state
         let mut initialized_rx = time_rx.clone();

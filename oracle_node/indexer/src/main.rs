@@ -1,15 +1,19 @@
 mod args;
 mod indexer;
 
+use std::collections::HashSet;
 use std::time::Duration;
-// use std::fmt::Debug;
+// third-party
 use clap::Parser as _;
-use indexer::Indexer;
+use tokio::sync::watch;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
-use common::time_poller;
+// internal
+// use common::time_poller;
+use common::time_info_poll;
+use indexer::Indexer;
 use crate::args::IndexerArgs;
-use crate::indexer::spawn_channel_discoverer;
+use crate::indexer::channel_discover;
 
 #[tokio::main]
 async fn main() {
@@ -27,12 +31,19 @@ pub async fn run(args: IndexerArgs) -> anyhow::Result<()> {
     info!("Oracle Indexer starting up...");
     info!("  Logos blockchain Node: {}", args.node_url);
 
-    let watch_channel_ids = spawn_channel_discoverer(Duration::from_millis(100));
-    let watch_time_info = time_poller(args.node_url.to_string(), Duration::from_millis(100));
+    let (watch_channel_ids_tx, watch_channel_ids_rx) = watch::channel(HashSet::new());
+    let _channel_discover_handle = tokio::spawn(async move {
+        channel_discover(Duration::from_millis(100), watch_channel_ids_tx).await
+    });
+    let (watch_time_info_tx, watch_time_info_rx) = watch::channel(None);
+    let node_url = args.node_url.clone();
+    let _watch_time_info_handle = tokio::spawn(async move  {
+        time_info_poll(node_url, Duration::from_millis(100), watch_time_info_tx).await
+    });
 
     // Wait for some initial channel_ids & time_info
-    let mut chi = watch_channel_ids.clone();
-    let mut ti = watch_time_info.clone();
+    let mut chi = watch_channel_ids_rx.clone();
+    let mut ti = watch_time_info_rx.clone();
     let (_first, _second) = tokio::join!(
         chi.wait_for(|state| !state.is_empty()),
         ti.wait_for(|state| state.is_some()),
@@ -43,8 +54,8 @@ pub async fn run(args: IndexerArgs) -> anyhow::Result<()> {
         &args.node_url,
         args.node_auth_username,
         args.node_auth_password,
-        watch_time_info.clone(),
-        watch_channel_ids.clone(),
+        watch_time_info_rx.clone(),
+        watch_channel_ids_rx.clone(),
     ) {
         Ok(i) => i,
         Err(e) => {
