@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     sudo \
     unzip \
+    protobuf-compiler \
+    clang \
     && rm -rf /var/lib/apt/lists/*
 
 ENV HOME=/home/ubuntu

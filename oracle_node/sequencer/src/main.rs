@@ -4,15 +4,19 @@ mod monitor;
 mod zone_state;
 mod args;
 
-use anyhow::Context;
-use clap::Parser;
-use dashmap::DashMap;
-use futures::AsyncWriteExt;
-use tokio::task::JoinSet;
+pub mod lon {
+    include!(concat!(env!("OUT_DIR"), "/lon.rs"));
+}
+
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
 use crate::pyth_fetch::fetch_price;
 use crate::sequencer::Sequencer;
+use anyhow::Context;
+use clap::Parser;
+use dashmap::DashMap;
+// use futures::AsyncWriteExt;
+use tokio::task::JoinSet;
 
 #[tokio::main]
 async fn main() {
@@ -32,6 +36,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     let mut sequencer = Sequencer::new(
         &args.node_url,
+        &args.oracle_key_path,
         &args.key_path,
         args.node_auth_username,
         args.node_auth_password,
