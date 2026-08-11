@@ -1,5 +1,6 @@
 mod args;
 mod indexer;
+mod register_contract;
 
 use std::collections::HashSet;
 use std::time::Duration;

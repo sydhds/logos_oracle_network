@@ -3,6 +3,7 @@ mod pyth_fetch;
 mod monitor;
 mod zone_state;
 mod args;
+mod register_contract;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
