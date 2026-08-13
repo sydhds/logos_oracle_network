@@ -45,8 +45,12 @@ Note:
   * `spel pda counter`
   * `spel inspect "G1gkRm62LdJ2XWpj5NBHeHgdNgjrzqQuPnW4CL8GqNjm" --type CounterState`
 
+## Build oracle register contract
 
-
-
+* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
+* Faster dev build (still requires the CARGO_TARGET_DIR export):
+  * `RUSTFLAGS='--cfg getrandom_backend="custom"' cargo +risc0 build -j 8 --release --target riscv32im-risc0-zkvm-elf --manifest-path methods/guest/Cargo.toml`	
+    * Note: See `https://github.com/rust-random/getrandom#custom-backend` about getrandom entropy source customisation
+    * Note2: Requires modifications in `methods/Cargo.toml` & `methods/guest/Cargo.toml` (getrandom features flag for risc0-zkvm, getrandom 0.2 custom feature flag, ...)
 
 

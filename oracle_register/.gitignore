@@ -4,3 +4,5 @@ methods/guest/target/
 .oracle_register-state
 .oracle_register-state.tmp
 ui/
+
+.idea

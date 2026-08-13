@@ -2,6 +2,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use tiny_keccak::{Hasher, Keccak};
 
 pub const TREE_DEPTH: usize = 10;
+/// Maximum number of leaves the tree can hold (2^TREE_DEPTH).
+pub const TREE_CAPACITY: usize = 1 << TREE_DEPTH;
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 /// A lightweight Incremental Merkle Tree
@@ -78,6 +80,16 @@ impl OracleMerkleTree {
         self.current_root = current_node;
         self.next_index += 1;
         Ok(())
+    }
+
+    /// Returns the maximum capacity of the tree
+    pub const fn capacity() -> usize {
+        TREE_CAPACITY
+    }
+
+    /// Returns the number of currently registered oracle leaves.
+    pub fn len(&self) -> usize {
+        self.next_index as usize
     }
 }
 
