@@ -5,4 +5,6 @@ methods/guest/target/
 .oracle_register-state.tmp
 ui/
 
+generated
+*.json
 .idea

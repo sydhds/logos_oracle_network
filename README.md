@@ -49,8 +49,14 @@ Note:
 
 * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
 * Faster dev build (still requires the CARGO_TARGET_DIR export):
-  * `RUSTFLAGS='--cfg getrandom_backend="custom"' cargo +risc0 build -j 8 --release --target riscv32im-risc0-zkvm-elf --manifest-path methods/guest/Cargo.toml`	
-    * Note: See `https://github.com/rust-random/getrandom#custom-backend` about getrandom entropy source customisation
-    * Note2: Requires modifications in `methods/Cargo.toml` & `methods/guest/Cargo.toml` (getrandom features flag for risc0-zkvm, getrandom 0.2 custom feature flag, ...)
+  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
+* Generate idl
+  * `spel generate-idl methods/guest/src/bin/oracle_register.rs > oracle_register-idl.json`
 
+## Deploy it (WIP)
 
+* Copy file
+  * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
+  * dev build: `cp -v /home/ubuntu/local_target/oracle_register/riscv-guest/oracle_register-methods/oracle_register-guest/riscv32im-risc0-zkvm-elf/release/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin`
+* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
+* `spel register --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`

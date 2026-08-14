@@ -1,4 +1,5 @@
 #![no_main]
+extern crate core;
 
 use spel_framework::prelude::*;
 use oracle_register_core::imt::{OracleMerkleTree, TREE_CAPACITY};
@@ -14,7 +15,6 @@ risc0_zkvm::guest::entry!(main);
 pub struct RegisterState {
     // /// The current count value.
     // pub count: u64,
-
     /// The owner
     pub owner: [u8; 32],
     pub mtree: OracleMerkleTree,
@@ -34,6 +34,7 @@ impl Default for RegisterState {
 
 #[lez_program]
 mod my_counter {
+    use core::panic::PanicMessage;
     #[allow(unused_imports)]
     use super::*;
 
@@ -68,6 +69,9 @@ mod my_counter {
         owner: AccountWithMetadata,
     ) -> SpelResult {
 
+        println!("[print] register");
+        eprintln!("[eprint] register");
+
         let data: Vec<u8> = counter.account.data.clone().into();
         let mut state: RegisterState = borsh::from_slice(&data).map_err(|e| {
             SpelError::DeserializationError {
@@ -91,14 +95,19 @@ mod my_counter {
         })?;
         */
 
-        let pk = [1u8; 32];
+        let pk = [46u8; 32];
         state.mtree.insert_oracle(pk).map_err(|e| SpelError::Custom { code: 0, message: e.to_string() })?;
         let registered_idx = state.mtree.next_index.saturating_sub(1) as usize;
+        println!("registered_idx: {}", registered_idx);
         state.registered[registered_idx] = pk;
+
+        println!("state registered len: {}", state.registered.len());
+        println!("state registered 0: {:?}", state.registered[0]);
 
         let bytes = borsh::to_vec(&state).map_err(|e| SpelError::SerializationError {
             message: e.to_string(),
         })?;
+        println!("bytes len: {}", bytes.len());
         counter.account.data = bytes.try_into().unwrap();
 
         Ok(SpelOutput::execute(vec![counter, owner], vec![]))
@@ -141,17 +150,18 @@ mod my_counter {
     }
     */
 
-    /*
     /// Get the current count value (read-only).
     ///
     /// The caller inspects the counter account after the transaction to read the count —
     /// see Step 6 for the `spel inspect … --type CounterState` flow.
     #[instruction]
-    pub fn get_count(
+    pub fn get_register_state(
         #[account(pda = literal("register"))]
         counter: AccountWithMetadata,
     ) -> SpelResult {
+        println!("[print] get_register_state");
+        eprintln!("[eprint] get_register_state");
+        // info!("[eprint] get_register_state");
         Ok(SpelOutput::execute(vec![counter], vec![]))
     }
-    */
 }
