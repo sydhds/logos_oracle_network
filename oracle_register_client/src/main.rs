@@ -215,8 +215,48 @@ async fn main() -> anyhow::Result<()> {
     // println!("program: {:?}", program);
     let pid = program.id();
     println!("pid: {:?}", pid);
+    let program_id_hex_str: String = pid
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .map(|b| format!("{:02x}", b))
+        .collect();
+    println!("pid: {}", program_id_hex_str);
+
+    // Debug - print program id (for 2nd arg)
+    {
+        let program_path_ = std::env::args().into_iter().nth(2);
+        println!("program path 2: {:?}", program_path_);
+        let program_path = program_path_.ok_or(anyhow!("No args"))?;
+        let program_bytecode = std::fs::read(program_path.clone())
+            .context(format!("Error while reading: {}", program_path))?;
+        let program = Program::new(program_bytecode.into())?;
+        // println!("program: {:?}", program);
+        let pid = program.id();
+        println!("pid 2: {:?}", pid);
+
+        let program_id_hex_str: String = pid
+            .iter()
+            .flat_map(|w| w.to_le_bytes())
+            .map(|b| format!("{:02x}", b))
+            .collect();
+
+        println!("as hex, pid 2: {}", program_id_hex_str);
+    }
 
     let wallet_core = WalletCore::from_env()?;
+
+    // Debug 2 - get Account from wallet
+    {
+        // 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp
+        let account_id_sender = AccountId::from_str("9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp")?;
+        // 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK
+        let account_id_receiver = AccountId::from_str("58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK")?;
+        let account_sender = wallet_core.get_account_public(account_id_sender).await;
+        println!("account_sender: {:?}", account_sender);
+        let account_receiver = wallet_core.get_account_public(account_id_sender).await;
+        println!("account_receiver: {:?}", account_receiver);
+    }
+
     let client = MyCounterClient::new(&wallet_core, pid);
     // println!("client wallet: {:?}", client.wallet);
 

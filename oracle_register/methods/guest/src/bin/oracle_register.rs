@@ -1,10 +1,34 @@
 #![no_main]
 extern crate core;
 
+use serde::{Deserialize, Serialize};
 use spel_framework::prelude::*;
 use oracle_register_core::imt::{OracleMerkleTree, TREE_CAPACITY};
+// use lee::program::Program;
+use risc0_zkvm::serde::to_vec;
 
 risc0_zkvm::guest::entry!(main);
+
+/// Token Program Instruction.
+#[derive(Serialize, Deserialize)]
+pub enum TokenInstruction {
+    Transfer { amount_to_transfer: u128 },
+    NewFungibleDefinition {
+        name: String,
+        total_supply: u128,
+        mint_authority: Option<AccountId>,
+    },
+    NewDefinitionWithMetadata {
+        new_definition: String,
+    },
+    InitializeAccount,
+    Burn { amount_to_burn: u128 },
+    Mint { amount_to_mint: u128 },
+    MintWithAuthority { amount_to_mint: u128 },
+    PrintNft,
+    SetAuthority { new_authority: Option<AccountId> },
+    SetAuthorityWithAuthority { new_authority: Option<AccountId> },
+}
 
 /// The counter state stored on-chain.
 ///
@@ -34,7 +58,7 @@ impl Default for RegisterState {
 
 #[lez_program]
 mod my_counter {
-    use core::panic::PanicMessage;
+    // use core::panic::PanicMessage;
     #[allow(unused_imports)]
     use super::*;
 
@@ -67,6 +91,13 @@ mod my_counter {
         mut counter: AccountWithMetadata,
         #[account(signer)]
         owner: AccountWithMetadata,
+        // Sender: An account with some LON TOKEN
+        #[account(mut)]
+        from: AccountWithMetadata,
+        // Receiver: An escrow account owned by oracle_register
+        // This has to be computed in advance by the caller but it's deterministic
+        #[account(init, mut, pda = [literal("escrow"), account("counter")])]
+        to: AccountWithMetadata,
     ) -> SpelResult {
 
         println!("[print] register");
@@ -95,7 +126,7 @@ mod my_counter {
         })?;
         */
 
-        let pk = [46u8; 32];
+        let pk = [47u8; 32];
         state.mtree.insert_oracle(pk).map_err(|e| SpelError::Custom { code: 0, message: e.to_string() })?;
         let registered_idx = state.mtree.next_index.saturating_sub(1) as usize;
         println!("registered_idx: {}", registered_idx);
@@ -110,7 +141,38 @@ mod my_counter {
         println!("bytes len: {}", bytes.len());
         counter.account.data = bytes.try_into().unwrap();
 
-        Ok(SpelOutput::execute(vec![counter, owner], vec![]))
+        let pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
+        // let instruction_data: InstructionData = vec![];
+        let instruction_transfer = TokenInstruction::Transfer { amount_to_transfer: 10 };
+        let instruction_data = to_vec(&instruction_transfer).unwrap();
+        // TODO: can wallet get an account?
+        /*
+        account_sender: Ok(Account { program_owner: "e5884cfe882bd11e490a9a51e9eef060581e8aca2597c5acf329aa655fb140c6", balance: 0, data: Data([0, 9, 94, 216, 173, 42, 11, 199, 31, 8, 190, 170, 137, 128, 130, 23, 55, 149, 224, 140, 177, 12, 78, 4, 134, 50, 111, 45, 135, 109, 104, 238, 184, 140, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), nonce: Nonce(2) })
+        account_receiver: Ok(Account { program_owner: "e5884cfe882bd11e490a9a51e9eef060581e8aca2597c5acf329aa655fb140c6", balance: 0, data: Data([0, 9, 94, 216, 173, 42, 11, 199, 31, 8, 190, 170, 137, 128, 130, 23, 55, 149, 224, 140, 177, 12, 78, 4, 134, 50, 111, 45, 135, 109, 104, 238, 184, 140, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), nonce: Nonce(2) })
+         */
+        let chained_call_transfer = ChainedCall {
+            /// The program ID of the program to execute.
+            program_id: pg_id,
+            pre_states: vec![
+                // Sender
+                from,
+                // Recipient
+                to,
+            ],
+            instruction_data,
+            pda_seeds: vec![],
+            /*
+            pub pre_states: Vec<AccountWithMetadata>,
+            /// The instruction data to pass.
+            pub instruction_data: InstructionData,
+            /// PDA seeds authorized for the callee. For each seed, the callee is authorized to
+            /// mutate the `AccountId` derived from `(caller_program_id, seed)`, regardless of
+            /// whether the account is public or private.
+            pub pda_seeds: Vec<PdaSeed>,
+            */
+        };
+
+        Ok(SpelOutput::execute(vec![counter, owner], vec![chained_call_transfer]))
     }
 
     /*
