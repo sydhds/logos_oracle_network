@@ -2213,7 +2213,9 @@ dependencies = [
  "risc0-zkvm",
  "ruint",
  "serde",
+ "sha2",
  "spel-framework",
+ "token_core",
 ]
 
 [[package]]
@@ -3647,6 +3649,16 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "token_core"
+version = "0.1.0"
+source = "git+https://github.com/logos-blockchain/logos-execution-zone.git?tag=v0.2.0#a58fbce2ff48c58b7bb5001b1a27e64b9596ee3a"
+dependencies = [
+ "borsh",
+ "lee_core",
+ "serde",
+]
 
 [[package]]
 name = "tokio"

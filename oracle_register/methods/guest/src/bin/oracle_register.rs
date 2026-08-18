@@ -6,9 +6,12 @@ use spel_framework::prelude::*;
 use oracle_register_core::imt::{OracleMerkleTree, TREE_CAPACITY};
 // use lee::program::Program;
 use risc0_zkvm::serde::to_vec;
+use sha2::{Sha256, Digest};
+use token_core::{Instruction as TokenInstruction, TokenHolding};
 
 risc0_zkvm::guest::entry!(main);
 
+/*
 /// Token Program Instruction.
 #[derive(Serialize, Deserialize)]
 pub enum TokenInstruction {
@@ -29,6 +32,7 @@ pub enum TokenInstruction {
     SetAuthority { new_authority: Option<AccountId> },
     SetAuthorityWithAuthority { new_authority: Option<AccountId> },
 }
+*/
 
 /// The counter state stored on-chain.
 ///
@@ -92,16 +96,23 @@ mod my_counter {
         #[account(signer)]
         owner: AccountWithMetadata,
         // Sender: An account with some LON TOKEN
-        #[account(mut)]
+        #[account(signer)]
         from: AccountWithMetadata,
-        // Receiver: An escrow account owned by oracle_register
-        // This has to be computed in advance by the caller but it's deterministic
-        #[account(init, mut, pda = [literal("escrow"), account("counter")])]
-        to: AccountWithMetadata,
+        // Receiver: An escrow account owned by oracle_register contract (per registered oracle node)
+        // TODO: better as it decouples the token sender from the oracle node registered
+        // #[account(init, mut, pda = [literal("escrow"), arg("oracle_key")])]
+        // #[account(init, mut, pda = [literal("escrow"), account("counter")])]
+        #[account(mut)]
+        mut to: AccountWithMetadata,
+        #[account()]
+        token_def_account: AccountWithMetadata,
+        // oracle_key: [u8; 32],
+        pda_seed: [u8; 32],
     ) -> SpelResult {
 
         println!("[print] register");
         eprintln!("[eprint] register");
+        println!("oracle register pg id: {:?}", counter.account.program_owner);
 
         let data: Vec<u8> = counter.account.data.clone().into();
         let mut state: RegisterState = borsh::from_slice(&data).map_err(|e| {
@@ -141,26 +152,87 @@ mod my_counter {
         println!("bytes len: {}", bytes.len());
         counter.account.data = bytes.try_into().unwrap();
 
-        let pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
+        let token_pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
+        assert_eq!(token_pg_id, token_def_account.account.program_owner);
+
+        // let instruction_init = TokenInstruction::InitializeAccount {};
+        // let instruction_data_init = to_vec(&instruction_init).unwrap();
+        let instruction_data_init = to_vec(
+            &TokenInstruction::InitializeAccount
+        ).unwrap();
+
+        println!("instruction_data_init: {:?}", instruction_data_init);
+        println!("token def account pg id: {:?}", token_def_account.account.program_owner);
+        println!("token def account is auth: {:?}", token_def_account.is_authorized);
+        println!("to pg id: {:?}", to.account.program_owner);
+        println!("to is authorized: {:?}", to.is_authorized);
+
+        let to_authorized = {
+            let mut to = to.clone();
+            to.is_authorized = true;
+            to
+        };
+        // let pda_seeds = vec![
+        //     b"escrow".to_vec(),
+        //     oracle_key.to_vec(),
+        // ];
+
+        // let pda_seed_ = PdaSeed::new(pda_seed);
+
+        /*
+        let pda_seed_ = {
+            // 1. Emulate `literal("escrow")`: right-padded with zeroes to 32 bytes
+            let mut literal_seed = [0u8; 32];
+            literal_seed[..6].copy_from_slice(b"escrow");
+
+            // 2. Emulate the macro's combination: SHA-256( literal_seed || oracle_key )
+            let mut hasher = Sha256::new();
+            hasher.update(literal_seed);
+            hasher.update(oracle_key);
+            let computed_seed_bytes: [u8; 32] = hasher.finalize().into();
+
+            let pda_seed_ = PdaSeed::new(computed_seed_bytes);
+            pda_seed_
+        };
+        println!("pda_seed_: {:?}", pda_seed_);
+        */
+
+        println!("pda_seed: {:?}", pda_seed);
+
+        let chained_call_init = ChainedCall {
+            // Call the token program
+            program_id: token_pg_id,
+            pre_states: vec![
+                // definition account
+                token_def_account.clone(),
+                // account to init
+                to_authorized.clone(),
+                // to.clone()
+            ],
+            instruction_data: instruction_data_init,
+            pda_seeds: vec![PdaSeed::new(pda_seed)],
+        };
+
         // let instruction_data: InstructionData = vec![];
         let instruction_transfer = TokenInstruction::Transfer { amount_to_transfer: 10 };
-        let instruction_data = to_vec(&instruction_transfer).unwrap();
-        // TODO: can wallet get an account?
+        let instruction_data_transfer = to_vec(&instruction_transfer).unwrap();
+        println!("AAC instruction_data transfer: {:?}", instruction_data_transfer);
+
         /*
         account_sender: Ok(Account { program_owner: "e5884cfe882bd11e490a9a51e9eef060581e8aca2597c5acf329aa655fb140c6", balance: 0, data: Data([0, 9, 94, 216, 173, 42, 11, 199, 31, 8, 190, 170, 137, 128, 130, 23, 55, 149, 224, 140, 177, 12, 78, 4, 134, 50, 111, 45, 135, 109, 104, 238, 184, 140, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), nonce: Nonce(2) })
         account_receiver: Ok(Account { program_owner: "e5884cfe882bd11e490a9a51e9eef060581e8aca2597c5acf329aa655fb140c6", balance: 0, data: Data([0, 9, 94, 216, 173, 42, 11, 199, 31, 8, 190, 170, 137, 128, 130, 23, 55, 149, 224, 140, 177, 12, 78, 4, 134, 50, 111, 45, 135, 109, 104, 238, 184, 140, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), nonce: Nonce(2) })
          */
         let chained_call_transfer = ChainedCall {
             /// The program ID of the program to execute.
-            program_id: pg_id,
+            program_id: token_pg_id,
             pre_states: vec![
                 // Sender
-                from,
+                from.clone(),
                 // Recipient
-                to,
+                to_authorized,
             ],
-            instruction_data,
-            pda_seeds: vec![],
+            instruction_data: instruction_data_transfer,
+            pda_seeds: vec![PdaSeed::new(pda_seed)],
             /*
             pub pre_states: Vec<AccountWithMetadata>,
             /// The instruction data to pass.
@@ -172,7 +244,7 @@ mod my_counter {
             */
         };
 
-        Ok(SpelOutput::execute(vec![counter, owner], vec![chained_call_transfer]))
+        Ok(SpelOutput::execute(vec![counter, owner, from, to, token_def_account], vec![chained_call_transfer]))
     }
 
     /*
