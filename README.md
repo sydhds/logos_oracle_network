@@ -92,3 +92,22 @@ Note:
 ## Resources
 
 * lez-multisig: `https://github.com/logos-co/lez-multisig/blob/main/scripts/DEMO-RUNBOOK.md`
+
+## oracle_prices contract
+
+* Build
+  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
+  * `make build`
+  * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
+  * `make idl`
+* Deploy
+  * `make deploy`
+* Init a feed
+  * `spel initialize-feed --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
+* Publish a price
+  * `spel publish-price --feed-id 0000000000000000000000000000000000000000000000000000000000000001 --price 1000 --decimals 8 --valid-count 3 --round 1000 --confidence 4242`
+* Get price
+  * `spel pda feed_price --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
+    * `spel inspect "NjvkDBbwv6dfxHfyGQR7seiGXQwcvDfkYPHmCmURHym" --type PriceState`
+
+
