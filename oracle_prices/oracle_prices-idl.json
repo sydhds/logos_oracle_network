@@ -1,0 +1,188 @@
+{
+  "accounts": [
+    {
+      "name": "OraclePricesState",
+      "type": {
+        "fields": [
+          {
+            "name": "feeds",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "PriceState",
+      "type": {
+        "fields": [
+          {
+            "name": "feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "decimals",
+            "type": "u32"
+          },
+          {
+            "name": "valid_count",
+            "type": "u32"
+          },
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "confidence",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    }
+  ],
+  "errors": [],
+  "instructions": [
+    {
+      "accounts": [
+        {
+          "init": true,
+          "name": "oracle_prices_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [],
+      "name": "initialize"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "oracle_prices_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": true,
+          "name": "feed_price",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices__"
+              },
+              {
+                "kind": "arg",
+                "path": "feed_id"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ],
+      "name": "initialize_feed"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "feed_price",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices__"
+              },
+              {
+                "kind": "arg",
+                "path": "feed_id"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "decimals",
+          "type": "u32"
+        },
+        {
+          "name": "valid_count",
+          "type": "u32"
+        },
+        {
+          "name": "round",
+          "type": "u64"
+        },
+        {
+          "name": "confidence",
+          "type": "u64"
+        }
+      ],
+      "name": "publish_price"
+    }
+  ],
+  "name": "my_counter",
+  "types": [],
+  "version": "0.1.0"
+}
