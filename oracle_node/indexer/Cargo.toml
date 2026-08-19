@@ -42,6 +42,11 @@ serde_json.workspace = true
 common =  { path = "../common" }
 prost = "0.14" # grpc
 secp256k1 = { version = "0.29", features = ["rand", "hashes"] } # BIP-340 x-only
+# contract
+spel-framework = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
+spel-framework-core = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0", features = ["decode"] }
+spel = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
+wallet = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0" }
 
 [build-dependencies]
 prost-build = "0.14"
