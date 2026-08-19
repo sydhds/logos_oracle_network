@@ -67,7 +67,7 @@ Note:
 
 ## LEZ token program
 
-* doc: `https://github.com/logos-blockchain/lez-programs/pull/285/changes`
+* doc: `https://github.com/logos-blockchain/lez-programs/tree/main/docs/token`
 
 * `git clone https://github.com/logos-blockchain/lez-programs.git`
   * build: `cargo risczero build --manifest-path ./programs/token/methods/guest/Cargo.toml`
@@ -88,3 +88,7 @@ Note:
     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK" --type TokenHolding`
     * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- transfer --sender 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --recipient 58mmyXYGG4btrmFD1BwoY94BPAQ7MJE3x1hWugSCbChK --amount-to-transfer 10`
     * 
+
+## Resources
+
+* lez-multisig: `https://github.com/logos-co/lez-multisig/blob/main/scripts/DEMO-RUNBOOK.md`
