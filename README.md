@@ -119,5 +119,8 @@ Note:
   * `spel pda oracle_prices_account`
     * `spel inspect "5mprrVcUZgyMDRg4RD6pkwMHXK5DbwrPnEGZwm5ZKUHy" --type OraclePricesState` 
 
+### oracle_prices contract client
 
-
+* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
+* build lib: `cargo build --release`
+* run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 

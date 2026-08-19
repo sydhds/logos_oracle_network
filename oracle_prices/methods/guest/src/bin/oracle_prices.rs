@@ -25,7 +25,7 @@ pub struct PriceState {
 }
 
 #[lez_program]
-mod my_counter {
+mod oracle_prices {
     #[allow(unused_imports)]
     use super::*;
 
