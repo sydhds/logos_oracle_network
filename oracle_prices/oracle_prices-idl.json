@@ -63,12 +63,12 @@
       "accounts": [
         {
           "init": true,
-          "name": "prices",
+          "name": "oracle_prices_account",
           "pda": {
             "seeds": [
               {
                 "kind": "const",
-                "value": "prices"
+                "value": "oracle_prices"
               }
             ]
           },
@@ -81,6 +81,20 @@
     },
     {
       "accounts": [
+        {
+          "init": false,
+          "name": "oracle_prices_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": "oracle_prices"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
         {
           "init": true,
           "name": "feed_price",

@@ -102,6 +102,8 @@ Note:
   * `make idl`
 * Deploy
   * `make deploy`
+* Init contract
+  * `spel initialize`
 * Init a feed
   * `spel initialize-feed --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
 * Publish a price
@@ -109,5 +111,7 @@ Note:
 * Get price
   * `spel pda feed_price --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
     * `spel inspect "NjvkDBbwv6dfxHfyGQR7seiGXQwcvDfkYPHmCmURHym" --type PriceState`
-
+* Get feeds
+  * `spel pda oracle_prices_account`
+    * `spel inspect "5mprrVcUZgyMDRg4RD6pkwMHXK5DbwrPnEGZwm5ZKUHy" --type OraclePricesState` 
 

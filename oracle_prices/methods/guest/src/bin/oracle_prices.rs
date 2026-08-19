@@ -46,8 +46,8 @@ mod my_counter {
 
     #[instruction]
     pub fn initialize(
-        #[account(init, pda = literal("prices"))]
-        mut prices: AccountWithMetadata,
+        #[account(init, pda = literal("oracle_prices"))]
+        mut oracle_prices_account: AccountWithMetadata,
     ) -> SpelResult {
 
         let state = OraclePricesState {
@@ -56,9 +56,9 @@ mod my_counter {
         let bytes = borsh::to_vec(&state).map_err(|e| SpelError::SerializationError {
             message: e.to_string(),
         })?;
-        prices.account.data = bytes.try_into().unwrap();
+        oracle_prices_account.account.data = bytes.try_into().unwrap();
 
-        Ok(SpelOutput::execute(vec![prices], vec![]))
+        Ok(SpelOutput::execute(vec![oracle_prices_account], vec![]))
     }
 
     /*
@@ -125,6 +125,8 @@ mod my_counter {
 
     #[instruction]
     pub fn initialize_feed(
+        #[account(mut, pda = [literal("oracle_prices")])]
+        mut oracle_prices_account: AccountWithMetadata,
         #[account(init, pda = [literal("oracle_prices__"), arg("feed_id")])]
         mut feed_price: AccountWithMetadata,
         feed_id: [u8; 32],
@@ -135,7 +137,21 @@ mod my_counter {
         })?;
         feed_price.account.data = bytes.try_into().unwrap();
 
-        Ok(SpelOutput::execute(vec![feed_price], vec![]))
+        // Add feed to oracle prices state
+        let data: Vec<u8> = oracle_prices_account.account.data.clone().into();
+        let mut state: OraclePricesState = borsh::from_slice(&data).map_err(|e| {
+            SpelError::DeserializationError {
+                account_index: 0,
+                message: e.to_string(),
+            }
+        })?;
+        state.feeds.push(feed_id);
+        let bytes = borsh::to_vec(&state).map_err(|e| SpelError::SerializationError {
+            message: e.to_string(),
+        })?;
+        oracle_prices_account.account.data = bytes.try_into().unwrap();
+
+        Ok(SpelOutput::execute(vec![oracle_prices_account, feed_price], vec![]))
     }
 
     #[instruction]
