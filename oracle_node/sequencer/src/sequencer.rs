@@ -1,12 +1,17 @@
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
+// third-party
 use anyhow::Context;
-// use anyhow::anyhow;
 use dashmap::DashMap;
 use rand::Rng;
-// use tokio::sync::mpsc::UnboundedSender;
 use url::Url;
+use prost::Message;
+use pyth_sdk::Price;
+use secp256k1::{Keypair, Secp256k1, XOnlyPublicKey};
+use secp256k1::hashes::{sha256, Hash, sha256d};
+use tracing::{info, debug, error};
+// third-party - logos
 use logos_blockchain_zone_sdk::{
     adapter::NodeHttpClient,
     sequencer::{
@@ -16,23 +21,17 @@ use logos_blockchain_zone_sdk::{
     },
 };
 use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
-// use lb_core::codec::SerializeOp;
 use lb_core::mantle::ops::channel::{ChannelId, inscribe::Inscription};
 use lb_core::mantle::ops::channel::inscribe::MAX_BYTES;
 use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key};
+use lb_core::codec::DeserializeOp;
+// internal
 use crate::zone_state::InMemoryZoneState;
 use common::{
     ParsedUpdate,
     // PriceInfo
 };
-use prost::Message;
 use crate::lon::PriceObservation;
-use pyth_sdk::Price;
-use secp256k1::{Keypair, Secp256k1, XOnlyPublicKey};
-use lb_core::codec::DeserializeOp;
-use secp256k1::hashes::{sha256, Hash, sha256d};
-// use secp256k1::{Keypair, Message, Secp256k1, XOnlyPublicKey};
-// use secp256k1::Keypair;
 
 pub struct Sequencer {
     sequencer: ZoneSequencer<NodeHttpClient>,
@@ -66,7 +65,7 @@ impl Sequencer {
 
         let oracle_pubkey = generate_oracle_credentials(Path::new(oracle_key_path))?;
 
-        let signing_key = load_or_create_signing_key(Path::new(signing_key_path));
+        let signing_key = load_or_create_signing_key(Path::new(signing_key_path))?;
         let channel_id = ChannelId::from(signing_key.public_key().to_bytes());
         let node_url = Url::parse(node_endpoint)?; // .map_err(|e| anyhow!(e))?;
         let basic_auth = node_auth_username
@@ -88,8 +87,10 @@ impl Sequencer {
         })
     }
 
-    pub async fn run(&mut self) {
-        
+    pub async fn run(&mut self) -> anyhow::Result<()> {
+
+        info!("Starting sequencer...");
+
         let sequencer_client = self.client.clone();
 
         let price_map = self.price_map.clone();
@@ -115,7 +116,7 @@ impl Sequencer {
                 // store it
                 // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
                 // TODO: convert price_latest into PriceObservation
-                println!("price_latest: {:?}", price_latest);
+                info!("price_latest: {:?}", price_latest);
                 let scaled_pyth_price = Price {
                     price: price_latest.price.price.parse::<i64>().unwrap(),
                     conf: price_latest.price.conf.parse::<u64>().unwrap(),
@@ -151,17 +152,17 @@ impl Sequencer {
                 };
 
                 let payload_bytes = obs.encode_to_vec();
-                println!("payload bytes len: {}", payload_bytes.len());
-                println!("max bytes for inscription: {:?}", MAX_BYTES);
+                debug!("payload bytes len: {}", payload_bytes.len());
+                debug!("max bytes for inscription: {:?}", MAX_BYTES);
 
                 let inscription = Inscription::try_from(payload_bytes)
                     .map_err(|e| SequencerError::InscriptionTooLarge(e.to_string()))
                     .unwrap();
 
                 if let Err(e) = sequencer_client.publish(inscription).await {
-                    eprintln!("failed to publish batch: {e}");
+                    error!("failed to publish batch: {e}");
                 } else {
-                    println!("Submitted price update");
+                    debug!("Submitted price update");
                 }
 
                 // Wait for 1 minutes between 2 prices update
@@ -171,14 +172,14 @@ impl Sequencer {
 
         loop {
             let event = self.sequencer.next_event().await;
-            println!("Handle event: {:?}", event);
-            handle_event(event, &mut self.sequencer, &mut self.state, &self.checkpoint_path);
+            // println!("Handle event: {:?}", event);
+            handle_event(event, &mut self.sequencer, &mut self.state, &self.checkpoint_path)?;
         }
     }
 
 }
 
-fn load_or_create_signing_key(path: &Path) -> Ed25519Key {
+fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
     if path.exists() {
         let key_bytes = fs::read(path).expect("failed to read key file");
         assert!(
@@ -189,13 +190,17 @@ fn load_or_create_signing_key(path: &Path) -> Ed25519Key {
         );
         let key_array: [u8; ED25519_SECRET_KEY_SIZE] =
             key_bytes.try_into().expect("length already checked");
-        Ed25519Key::from_bytes(&key_array)
+        Ok(Ed25519Key::from_bytes(&key_array))
     } else {
         let mut key_bytes = [0u8; ED25519_SECRET_KEY_SIZE];
         let mut rng = rand::thread_rng();
         rng.fill(&mut key_bytes);
-        fs::write(path, key_bytes).expect("failed to write key file");
-        Ed25519Key::from_bytes(&key_bytes)
+        println!("writing key file to: {}", path.display());
+        fs::write(path, key_bytes)
+            .context(format!("Writing key file to {}", path.display()))?
+            // .expect("failed to write key file")
+            ;
+        Ok(Ed25519Key::from_bytes(&key_bytes))
     }
 }
 
@@ -221,20 +226,27 @@ fn handle_event(
     _sequencer: &mut ZoneSequencer<NodeHttpClient>,
     _state: &mut InMemoryZoneState,
     checkpoint_path: &str,
-) {
+) -> anyhow::Result<()> {
     match event {
         Event::Ready => {
-            println!("Sequencer ready");
+            info!("Sequencer ready");
         },
         Event::BlocksProcessed { checkpoint, channel_update: _channel_update, finalized: _finalized } => {
-            println!("BlocksProcessed");
-            save_checkpoint(Path::new(checkpoint_path), &checkpoint);
+            // println!("BlocksProcessed");
+            save_checkpoint(Path::new(checkpoint_path), &checkpoint)?;
         },
         Event::MempoolPending(_) | Event::TurnNotification { .. } => {}
     }
+
+    Ok(())
 }
 
-fn save_checkpoint(path: &Path, checkpoint: &SequencerCheckpoint) {
-    let data = serde_json::to_vec(checkpoint).expect("failed to serialize checkpoint");
-    fs::write(path, data).expect("failed to write checkpoint file");
+fn save_checkpoint(path: &Path, checkpoint: &SequencerCheckpoint) -> anyhow::Result<()> {
+    let data = serde_json::to_vec(checkpoint)
+        .context(format!("Failed to serialize checkpoint: {:?}", checkpoint))?;
+        // .expect("failed to serialize checkpoint");
+    fs::write(path, data)
+        .context(format!("Failed to write checkpoint to {}", path.display()))?;
+        // .expect("failed to write checkpoint file");
+    Ok(())
 }

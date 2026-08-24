@@ -11,6 +11,14 @@ pub struct SequencerArgs {
     )]
     pub node_url: String,
 
+    /// Logos blockchain node REST API endpoint
+    #[arg(
+        long,
+        default_value = "http://localhost:18080",
+        env = "SEQUENCER_REST_ENDPOINT"
+    )]
+    pub node_rest_url: String,
+
     /// Path to the signing key file (created if it doesn't exist)
     #[arg(
         long,

@@ -124,3 +124,15 @@ Note:
 * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
 * build lib: `cargo build --release`
 * run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 
+
+## Logos blockchain setup
+
+* `cd logos-execution-zone`
+  * `docker compose up`
+    * Modification done: in `bedrock/node-config.yaml` -> `filter: "info,overwatch=off,overwatch::overwatch=off"`
+* Setup
+  * `sudo apt install protobuf-compiler`
+* Run sequencer
+  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --node-url http://localhost:8081`
+
+
