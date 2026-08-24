@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -22,18 +23,26 @@ pub struct SequencerArgs {
     /// Path to the signing key file (created if it doesn't exist)
     #[arg(
         long,
-        default_value = "./data/sequencer.key",
-        env = "SEQUENCER_SIGNING_KEY_PATH"
+        default_value = "./data",
+        env = "SEQUENCER_DATA_FOLDER"
     )]
-    pub key_path: String,
+    pub data_folder: PathBuf,
 
     /// Path to the signing key file (created if it doesn't exist)
     #[arg(
         long,
-        default_value = "./data/oracle.key",
+        default_value = "sequencer.key",
+        env = "SEQUENCER_SIGNING_KEY_PATH"
+    )]
+    pub key_path: PathBuf,
+
+    /// Path to the signing key file (created if it doesn't exist)
+    #[arg(
+        long,
+        default_value = "oracle.key",
         env = "SEQUENCER_ORACLE_SIGNING_KEY_PATH"
     )]
-    pub oracle_key_path: String,
+    pub oracle_key_path: PathBuf,
 
     /// Basic auth username for node endpoint
     #[arg(long, env = "SEQUENCER_NODE_AUTH_USERNAME")]
@@ -46,12 +55,12 @@ pub struct SequencerArgs {
     /// Path to the checkpoint file for crash recovery
     #[arg(
         long,
-        default_value = "./data/sequencer.checkpoint",
+        default_value = "sequencer.checkpoint",
         env = "CHECKPOINT_PATH"
     )]
-    pub checkpoint_path: String,
+    pub checkpoint_path: PathBuf,
 
     /// Path to the channel ID file
-    #[arg(long, default_value = "./data/channel.txt", env = "CHANNEL_PATH")]
-    pub channel_path: String,
+    #[arg(long, default_value = "channel.txt", env = "CHANNEL_PATH")]
+    pub channel_path: PathBuf,
 }

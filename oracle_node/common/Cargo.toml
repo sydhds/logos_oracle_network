@@ -17,6 +17,7 @@ serde = { workspace = true, default-features = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, default-features = false, features = ["json"]}
 tracing = { workspace = true }
+anyhow = { workspace = true }
 tokio = { default-features = false, features = [
     "io-std",
     "io-util",

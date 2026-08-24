@@ -1352,6 +1352,7 @@ dependencies = [
 name = "common"
 version = "0.2.1"
 dependencies = [
+ "anyhow",
  "logos-blockchain-http-api-common 0.2.1",
  "reqwest",
  "serde",

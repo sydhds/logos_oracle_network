@@ -10,7 +10,9 @@ pub mod lon {
 }
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
+use std::sync::Arc;
 // third-party
 use crate::sequencer::Sequencer;
 use anyhow::Context;
@@ -50,16 +52,19 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let pyth_base_url = "https://hermes.pyth.network/v2/updates/price/stream";
     let price_feed_eth_usdt = "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace";
 
-    let price_map = DashMap::new();
-    price_map.insert(price_feed_eth_usdt.to_string(), vec![]);
+    let price_map = {
+        let mut map = DashMap::new();
+        map.insert(price_feed_eth_usdt.to_string(), vec![]);
+        Arc::new(map)
+    };
 
     let mut sequencer = Sequencer::new(
         &args.node_rest_url,
-        &args.oracle_key_path,
-        &args.key_path,
+        args.data_folder.join(&args.oracle_key_path),
+        args.data_folder.join(&args.key_path),
         args.node_auth_username,
         args.node_auth_password,
-        &args.checkpoint_path,
+        args.data_folder.join(&args.checkpoint_path),
         price_map.clone(),
         price_feed_eth_usdt.to_string()
     ).context("Failed to initialize sequencer")?;
@@ -72,14 +77,15 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let price_monitor = PriceMonitor::new(price_map.clone());
 
     // Setup time info poll
-    // let (time_info_tx, time_info_rx) = tokio::sync::watch::channel(None);
+    let (time_info_tx, time_info_rx) = tokio::sync::watch::channel(None);
     let poll_interval = Duration::from_millis(20);
 
     let mut set = JoinSet::new();
-    // set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
-    set.spawn(async move { sequencer.run().await });
+    set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
     set.spawn(async move { fetch_price(pyth_base_url, price_feed_eth_usdt, tx).await });
     set.spawn(async move { price_monitor.run(&mut rx).await });
+    // FIXME: wait_ready ?
+    set.spawn(async move { sequencer.run().await });
 
     while let Some(res) = set.join_next().await {
         match res {

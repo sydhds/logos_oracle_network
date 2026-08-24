@@ -27,7 +27,7 @@ pub async fn time_info_poll(
     api_base_url: String,
     poll_interval: Duration,
     tx: watch::Sender<Option<TimeInfo>>,
-) {
+) -> anyhow:: Result<()> {
 
     let client = Client::new();
     let url = format!("{}{}", api_base_url.trim_end_matches('/'), paths::TIME_INFO);
@@ -62,6 +62,8 @@ pub async fn time_info_poll(
 
         sleep(poll_interval).await;
     }
+    
+    Ok(())
 }
 
 #[cfg(test)]

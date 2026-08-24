@@ -1,17 +1,18 @@
+use std::sync::Arc;
 // use tokio::select;
 use tokio::sync::mpsc::UnboundedReceiver;
 use dashmap::DashMap;
-use tracing::info;
+use tracing::{info, error};
 // external deps
 use common::{HermesPriceEvent, ParsedUpdate};
 
 pub struct PriceMonitor {
-    map: DashMap<String, Vec<ParsedUpdate>>,
+    map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
 }
 
 impl PriceMonitor {
 
-    pub fn new(map: DashMap<String, Vec<ParsedUpdate>>) -> Self {
+    pub fn new(map: Arc<DashMap<String, Vec<ParsedUpdate>>>) -> Self {
         Self { map }
     }
 
@@ -23,10 +24,11 @@ impl PriceMonitor {
 
         loop {
             let price_update = price_update_queue.recv().await;
-            let Some(price_update) = price_update else { eprintln!("Channel closed"); break; };
+            let Some(price_update) = price_update else { error!("Channel closed"); break; };
 
-            // println!("Got price update: {:?}", price_update);
+            // info!("Got price update: {:?}", price_update);
             if let Some(mut parsed) = price_update.parsed {
+                // info!("Got price update parsed: {:?}", parsed);
                 let parsed_0 = std::mem::take(&mut parsed[0]);
                 // To avoid a clone here (on parsed_0, when using or_insert) we expect the entry to be already present
                 self.map

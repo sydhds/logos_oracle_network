@@ -1,6 +1,7 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::sync::Arc;
 // third-party
 use anyhow::Context;
 use dashmap::DashMap;
@@ -39,8 +40,8 @@ pub struct Sequencer {
     // handle: SequencerHandle<NodeHttpClient>,
     state: InMemoryZoneState,
     // pub queue_file: String,
-    pub checkpoint_path: String,
-    price_map: DashMap<String, Vec<ParsedUpdate>>,
+    pub checkpoint_path: PathBuf,
+    price_map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
     price_feed: String,
     // oracle pubk
     oracle_pubkey: Keypair,
@@ -50,22 +51,22 @@ impl Sequencer {
 
     pub(crate) fn new(
         node_endpoint: &str,
-        oracle_key_path: &str,
-        signing_key_path: &str,
+        oracle_key_path: PathBuf,
+        signing_key_path: PathBuf,
         node_auth_username: Option<String>,
         node_auth_password: Option<String>,
         // queue_file: &str,
-        checkpoint_path: &str,
+        checkpoint_path: PathBuf,
         // channel_path: &str,
-        price_map: DashMap<String, Vec<ParsedUpdate>>,
+        price_map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
         price_feed: String,
     ) -> anyhow::Result<Self> {
 
         let checkpoint = None;
 
-        let oracle_pubkey = generate_oracle_credentials(Path::new(oracle_key_path))?;
+        let oracle_pubkey = generate_oracle_credentials(oracle_key_path.as_path())?;
 
-        let signing_key = load_or_create_signing_key(Path::new(signing_key_path))?;
+        let signing_key = load_or_create_signing_key(signing_key_path.as_path())?;
         let channel_id = ChannelId::from(signing_key.public_key().to_bytes());
         let node_url = Url::parse(node_endpoint)?; // .map_err(|e| anyhow!(e))?;
         let basic_auth = node_auth_username
@@ -80,7 +81,7 @@ impl Sequencer {
             client,
             state: InMemoryZoneState::default(),
             // queue_file: queue_file.to_owned(),
-            checkpoint_path: checkpoint_path.to_owned(),
+            checkpoint_path,
             price_map,
             price_feed,
             oracle_pubkey
@@ -102,16 +103,37 @@ impl Sequencer {
             let mut interval = tokio::time::interval(Duration::from_mins(1));
 
             // Wait for sequencer to be ready
+            info!("Waiting for sequencer to be ready...");
             let mut ready_rx = sequencer_client.subscribe_ready();
-            let _ = ready_rx.wait_for(|r| *r).await;
+            /*
+            info!("Waiting for sequencer to be ready 2...");
+            let _unused = tokio::time::timeout(
+                Duration::from_secs(5),
+                ready_rx.wait_for(|r| *r)
+            )
+                .await
+                .inspect_err(|e| info!("e1: {}", e))?
+                .inspect_err(|e| info!("e2: {}", e))?;
+            // info!("unused: {:?}", _unused);
+            drop(_unused);
+            */
+
+            info!("Sequencer ready, loop...");
 
             loop {
+
+                // info!("Loop start...");
 
                 // take prices from price_map
                 let prices: Vec<ParsedUpdate> = std::mem::take(
                     price_map.get_mut(&price_feed).unwrap().value_mut()
                 );
-                let Some(price_latest) = prices.last() else { continue };
+                // info!("price map: {:?}", price_map);
+                let Some(price_latest) = prices.last() else {
+                    info!("No prices...");
+                    // interval.tick().await;
+                    continue
+                };
 
                 // store it
                 // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
@@ -159,6 +181,7 @@ impl Sequencer {
                     .map_err(|e| SequencerError::InscriptionTooLarge(e.to_string()))
                     .unwrap();
 
+                info!("Publishing...");
                 if let Err(e) = sequencer_client.publish(inscription).await {
                     error!("failed to publish batch: {e}");
                 } else {
@@ -166,8 +189,11 @@ impl Sequencer {
                 }
 
                 // Wait for 1 minutes between 2 prices update
+                info!("Sequencer waiting...");
                 interval.tick().await;
             }
+
+            Ok::<(), anyhow::Error>(())
         });
 
         loop {
@@ -225,7 +251,7 @@ fn handle_event(
     event: Event,
     _sequencer: &mut ZoneSequencer<NodeHttpClient>,
     _state: &mut InMemoryZoneState,
-    checkpoint_path: &str,
+    checkpoint_path: &Path,
 ) -> anyhow::Result<()> {
     match event {
         Event::Ready => {
@@ -233,7 +259,7 @@ fn handle_event(
         },
         Event::BlocksProcessed { checkpoint, channel_update: _channel_update, finalized: _finalized } => {
             // println!("BlocksProcessed");
-            save_checkpoint(Path::new(checkpoint_path), &checkpoint)?;
+            save_checkpoint(checkpoint_path, &checkpoint)?;
         },
         Event::MempoolPending(_) | Event::TurnNotification { .. } => {}
     }
