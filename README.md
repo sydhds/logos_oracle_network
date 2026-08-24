@@ -92,3 +92,35 @@ Note:
 ## Resources
 
 * lez-multisig: `https://github.com/logos-co/lez-multisig/blob/main/scripts/DEMO-RUNBOOK.md`
+
+## oracle_prices contract
+
+* Build
+  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
+  * `make build`
+  * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
+  * `make idl`
+* Build (no docker)
+  * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
+  * `cp -v ~/local_target/oracle_prices/riscv-guest/oracle_prices-methods/oracle_prices-guest/riscv32im-risc0-zkvm-elf/release/oracle_prices.bin  methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
+  * `make idl`
+* Deploy
+  * `make deploy`
+* Init contract
+  * `spel initialize`
+* Init a feed
+  * `spel initialize-feed --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
+* Publish a price
+  * `spel publish-price --feed-id 0000000000000000000000000000000000000000000000000000000000000001 --price 1000 --decimals 8 --valid-count 3 --round 1000 --confidence 4242`
+* Get price
+  * `spel pda feed_price --feed-id 0000000000000000000000000000000000000000000000000000000000000001`
+    * `spel inspect "NjvkDBbwv6dfxHfyGQR7seiGXQwcvDfkYPHmCmURHym" --type PriceState`
+* Get feeds
+  * `spel pda oracle_prices_account`
+    * `spel inspect "5mprrVcUZgyMDRg4RD6pkwMHXK5DbwrPnEGZwm5ZKUHy" --type OraclePricesState` 
+
+### oracle_prices contract client
+
+* `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
+* build lib: `cargo build --release`
+* run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 
