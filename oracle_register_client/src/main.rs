@@ -13,9 +13,12 @@ use nssa::{
 // use spel_framework_core::prelude::AccountId;
 use borsh::{BorshSerialize, BorshDeserialize};
 use nssa::program::Program;
+use oracle_register_core::RegisterState;
 use serde::{Deserialize, Serialize};
 use wallet::WalletCore;
+use oracle_register_client::OracleRegisterClient;
 
+/*
 /// Parse a hex string into ProgramId [u32; 8] (little-endian byte order).
 pub fn parse_program_id_hex(s: &str) -> Result<ProgramId, String> {
     let s = s.trim_start_matches("0x");
@@ -183,9 +186,11 @@ impl<'w> MyCounterClient<'w> {
             .map_err(|e| format!("deserialize counter: {}", e))
     }
 }
+*/
 
 // Added
 
+/*
 mod imt;
 use crate::imt::{OracleMerkleTree, TREE_CAPACITY};
 // use borsh::{BorshDeserialize, BorshSerialize};
@@ -201,6 +206,7 @@ pub struct RegisterState {
     // Note: with tree depth of 10, this is 32 * 1024 -> 32Kb so ok
     pub registered: [[u8; 32]; TREE_CAPACITY],
 }
+*/
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -257,10 +263,10 @@ async fn main() -> anyhow::Result<()> {
         println!("account_receiver: {:?}", account_receiver);
     }
 
-    let client = MyCounterClient::new(&wallet_core, pid);
+    let client = OracleRegisterClient::new(&wallet_core, pid);
     // println!("client wallet: {:?}", client.wallet);
 
-    let data = client.fetch_counter::<RegisterState>().await;
+    let data = client.fetch_register::<RegisterState>().await;
     println!("data registered 0: {:?}", data.unwrap().registered[0]);
 
     Ok(())

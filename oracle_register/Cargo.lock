@@ -5200,6 +5200,7 @@ dependencies = [
  "borsh",
  "rs_merkle",
  "serde",
+ "spel-framework-macros 0.6.0 (git+https://github.com/logos-co/spel.git?tag=v0.6.0)",
  "tiny-keccak",
 ]
 
@@ -6992,7 +6993,7 @@ dependencies = [
  "sequencer_service_rpc",
  "serde",
  "serde_json",
- "spel-framework-core 0.6.0",
+ "spel-framework-core 0.6.0 (git+https://github.com/logos-co/spel.git?branch=main)",
  "tokio",
  "toml",
  "wallet",
@@ -7006,8 +7007,8 @@ dependencies = [
  "borsh",
  "lee_core",
  "serde_json",
- "spel-framework-core 0.6.0",
- "spel-framework-macros",
+ "spel-framework-core 0.6.0 (git+https://github.com/logos-co/spel.git?branch=main)",
+ "spel-framework-macros 0.6.0 (git+https://github.com/logos-co/spel.git?branch=main)",
 ]
 
 [[package]]
@@ -7022,6 +7023,23 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "spel-framework-core"
+version = "0.6.0"
+source = "git+https://github.com/logos-co/spel.git?tag=v0.6.0#0cb7e0980535af619482cf1c823f4d394b3ebd61"
+dependencies = [
+ "base58",
+ "borsh",
+ "lee_core",
+ "proc-macro2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "syn 2.0.119",
+ "thiserror 1.0.69",
+ "toml",
 ]
 
 [[package]]
@@ -7044,13 +7062,26 @@ dependencies = [
 [[package]]
 name = "spel-framework-macros"
 version = "0.6.0"
+source = "git+https://github.com/logos-co/spel.git?tag=v0.6.0#0cb7e0980535af619482cf1c823f4d394b3ebd61"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "sha2",
+ "spel-framework-core 0.6.0 (git+https://github.com/logos-co/spel.git?tag=v0.6.0)",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "spel-framework-macros"
+version = "0.6.0"
 source = "git+https://github.com/logos-co/spel.git?branch=main#0cb7e0980535af619482cf1c823f4d394b3ebd61"
 dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
  "sha2",
- "spel-framework-core 0.6.0",
+ "spel-framework-core 0.6.0 (git+https://github.com/logos-co/spel.git?branch=main)",
  "syn 2.0.119",
 ]
 

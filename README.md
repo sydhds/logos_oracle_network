@@ -45,7 +45,9 @@ Note:
   * `spel pda counter`
   * `spel inspect "G1gkRm62LdJ2XWpj5NBHeHgdNgjrzqQuPnW4CL8GqNjm" --type CounterState`
 
-## Build oracle register contract
+## Oracle register contract
+
+### Build
 
 * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
 * Faster dev build (still requires the CARGO_TARGET_DIR export):
@@ -53,7 +55,7 @@ Note:
 * Generate idl
   * `spel generate-idl methods/guest/src/bin/oracle_register.rs > oracle_register-idl.json`
 
-## Deploy it (WIP)
+### Deploy
 
 * Copy file
   * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
@@ -61,7 +63,11 @@ Note:
 * `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
 * `spel register --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
 
-## Use oracle_register_client
+### Generate client code
+
+* `spel-client-gen --idl oracle_register-idl.json --out-dir ../oracle_register_client/src`
+
+### oracle_register_client
 
 * `cargo run -- /home/ubuntu/repos/logos_oracle_network/oracle_register/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin /home/ubuntu/lez-programs/programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
 

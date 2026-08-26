@@ -130,7 +130,7 @@ impl Sequencer {
                 );
                 // info!("price map: {:?}", price_map);
                 let Some(price_latest) = prices.last() else {
-                    info!("No prices...");
+                    // info!("No prices...");
                     // interval.tick().await;
                     continue
                 };
@@ -182,10 +182,12 @@ impl Sequencer {
                     .unwrap();
 
                 info!("Publishing...");
+                let ts = std::time::Instant::now();
                 if let Err(e) = sequencer_client.publish(inscription).await {
                     error!("failed to publish batch: {e}");
                 } else {
-                    debug!("Submitted price update");
+                    let elapsed = ts.elapsed();
+                    debug!("Submitted price update in {} milliseconds", elapsed.as_millis());
                 }
 
                 // Wait for 1 minutes between 2 prices update

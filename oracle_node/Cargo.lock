@@ -6702,6 +6702,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "oracle_register_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh 1.8.0",
+ "common 0.1.0",
+ "hex",
+ "lee",
+ "lee_core",
+ "oracle_register_core",
+ "sequencer_service_rpc",
+ "serde",
+ "spel-framework",
+ "spel-framework-core",
+ "tiny-keccak",
+ "tokio",
+ "wallet",
+]
+
+[[package]]
+name = "oracle_register_core"
+version = "0.1.0"
+dependencies = [
+ "borsh 1.8.0",
+ "serde",
+ "spel-framework-macros",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "overwatch"
 version = "0.1.0"
 source = "git+https://github.com/logos-co/Overwatch?rev=448c192#448c192895b8311c742b1726a1bb12ee314ad95c"
@@ -8551,10 +8581,12 @@ dependencies = [
  "common 0.2.1",
  "dashmap",
  "futures",
+ "hex",
  "logos-blockchain-common-http-client 0.2.1",
  "logos-blockchain-core 0.2.1",
  "logos-blockchain-key-management-system-service",
  "logos-blockchain-zone-sdk",
+ "oracle_register_client",
  "prost 0.14.4",
  "prost-build",
  "pyth-sdk",
@@ -8572,6 +8604,7 @@ dependencies = [
  "tracing-subscriber 0.3.23",
  "url",
  "uuid",
+ "wallet",
 ]
 
 [[package]]

@@ -16,10 +16,13 @@ use std::sync::Arc;
 // third-party
 use crate::sequencer::Sequencer;
 use anyhow::Context;
+use spel_framework::prelude::AccountId;
 use clap::Parser;
 use dashmap::DashMap;
 // use futures::AsyncWriteExt;
 use tokio::task::JoinSet;
+use serde::{Serialize, Deserialize};
+use serde_json;
 use tracing::{
     info,
     debug,
@@ -32,6 +35,7 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberI
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
 use crate::pyth_fetch::fetch_price;
+use crate::register_contract::{sequencer_register, RegisterContractInfo};
 use common::time_info_poll;
 
 #[tokio::main]
@@ -80,6 +84,19 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let (time_info_tx, time_info_rx) = tokio::sync::watch::channel(None);
     let poll_interval = Duration::from_millis(20);
 
+    // Register (or check it is already registered) to oracle_register contract
+    {
+        let file = std::fs::File::open(args.register_contract_config)?;
+        let reader = std::io::BufReader::new(file);
+        let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
+
+        info!("cfg: {:?}", cfg);
+
+        let _ = sequencer_register(cfg).await?;
+
+        panic!("===");
+    }
+
     let mut set = JoinSet::new();
     set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
     set.spawn(async move { fetch_price(pyth_base_url, price_feed_eth_usdt, tx).await });
@@ -121,3 +138,6 @@ fn setup_tracing() {
         .with(filter)
         .init();
 }
+
+
+

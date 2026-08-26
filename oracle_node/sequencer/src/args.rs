@@ -63,4 +63,7 @@ pub struct SequencerArgs {
     /// Path to the channel ID file
     #[arg(long, default_value = "channel.txt", env = "CHANNEL_PATH")]
     pub channel_path: PathBuf,
+
+    #[arg(long, default_value = "register_contract_config.json")]
+    pub register_contract_config: PathBuf,
 }

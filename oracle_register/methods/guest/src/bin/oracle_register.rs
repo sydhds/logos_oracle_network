@@ -3,7 +3,8 @@ extern crate core;
 
 use serde::{Deserialize, Serialize};
 use spel_framework::prelude::*;
-use oracle_register_core::imt::{OracleMerkleTree, TREE_CAPACITY};
+// use oracle_register_core::imt::{OracleMerkleTree, TREE_CAPACITY};
+use oracle_register_core::RegisterState;
 // use lee::program::Program;
 use risc0_zkvm::serde::to_vec;
 use sha2::{Sha256, Digest};
@@ -34,6 +35,7 @@ pub enum TokenInstruction {
 }
 */
 
+/*
 /// The counter state stored on-chain.
 ///
 /// `#[account_type]` registers this in the IDL so `spel inspect <PDA> --type CounterState`
@@ -49,19 +51,12 @@ pub struct RegisterState {
     // Note: with tree depth of 10, this is 32 * 1024 -> 32Kb so ok
     pub registered: [[u8; 32]; TREE_CAPACITY],
 }
+*/
 
-impl Default for RegisterState {
-    fn default() -> Self {
-        Self {
-            owner: [0; 32],
-            mtree: Default::default(),
-            registered: [[0u8; 32]; TREE_CAPACITY],
-        }
-    }
-}
+
 
 #[lez_program]
-mod my_counter {
+mod oracle_register {
     // use core::panic::PanicMessage;
     #[allow(unused_imports)]
     use super::*;
@@ -72,29 +67,29 @@ mod my_counter {
     #[instruction]
     pub fn initialize(
         #[account(init, pda = literal("register"))]
-        mut counter: AccountWithMetadata,
+        mut register: AccountWithMetadata,
         #[account(signer)]
         owner: AccountWithMetadata,
     ) -> SpelResult {
-        let state = RegisterState {
+        let state = RegisterState::default(); /* {
             owner: *owner.account_id.value(),
             mtree: OracleMerkleTree::new(),
             registered: [[0u8; 32]; TREE_CAPACITY],
-        };
+        }; */
         let bytes = borsh::to_vec(&state).map_err(|e| SpelError::SerializationError {
             message: e.to_string(),
         })?;
-        counter.account.data = bytes.try_into().unwrap();
+        register.account.data = bytes.try_into().unwrap();
 
-        Ok(SpelOutput::execute(vec![counter, owner], vec![]))
+        Ok(SpelOutput::execute(vec![register, owner], vec![]))
     }
 
     #[instruction]
     pub fn register(
         #[account(mut, pda = literal("register"))]
-        mut counter: AccountWithMetadata,
-        #[account(signer)]
-        owner: AccountWithMetadata,
+        mut register: AccountWithMetadata,
+        // #[account(signer)]
+        // owner: AccountWithMetadata,
         // Sender: An account with some LON TOKEN
         #[account(signer)]
         from: AccountWithMetadata,
@@ -112,9 +107,9 @@ mod my_counter {
 
         println!("[print] register");
         eprintln!("[eprint] register");
-        println!("oracle register pg id: {:?}", counter.account.program_owner);
+        println!("oracle register pg id: {:?}", register.account.program_owner);
 
-        let data: Vec<u8> = counter.account.data.clone().into();
+        let data: Vec<u8> = register.account.data.clone().into();
         let mut state: RegisterState = borsh::from_slice(&data).map_err(|e| {
             SpelError::DeserializationError {
                 account_index: 0,
@@ -150,7 +145,7 @@ mod my_counter {
             message: e.to_string(),
         })?;
         println!("bytes len: {}", bytes.len());
-        counter.account.data = bytes.try_into().unwrap();
+        register.account.data = bytes.try_into().unwrap();
 
         let token_pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
         assert_eq!(token_pg_id, token_def_account.account.program_owner);
@@ -244,7 +239,7 @@ mod my_counter {
             */
         };
 
-        Ok(SpelOutput::execute(vec![counter, owner, from, to, token_def_account], vec![chained_call_transfer]))
+        Ok(SpelOutput::execute(vec![register, from, to, token_def_account], vec![chained_call_transfer]))
     }
 
     /*
@@ -284,6 +279,7 @@ mod my_counter {
     }
     */
 
+    /*
     /// Get the current count value (read-only).
     ///
     /// The caller inspects the counter account after the transaction to read the count —
@@ -298,4 +294,6 @@ mod my_counter {
         // info!("[eprint] get_register_state");
         Ok(SpelOutput::execute(vec![counter], vec![]))
     }
+    */
+
 }
