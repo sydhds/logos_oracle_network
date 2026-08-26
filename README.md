@@ -8,7 +8,7 @@
 * to install: sudo apt install unzip python3.12-dev pkgconf libpcsclite-dev
 * From tutorial.md in https://github.com/logos-co/spel/pull/138
   * RISC0 toolchain: https://dev.risczero.com/api/zkvm/install
-  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
+  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cd spel` && `git checkout v0.6.0`  && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
   * Compile logos execution zone: `git clone https://github.com/logos-blockchain/logos-execution-zone.git && cd logos-execution-zone && git checkout v0.2.0`
     * Find the logos execution zone version in spel/spel-framework/Cargo.toml
     * Compile: `cargo build --release --features standalone -p sequencer_service` && `cargo build --release -p wallet`
@@ -129,10 +129,17 @@ Note:
 
 * `cd logos-execution-zone`
   * `docker compose up`
-    * Modification done: in `bedrock/node-config.yaml` -> `filter: "info,overwatch=off,overwatch::overwatch=off"`
+    * Modification done: 
+      * in `bedrock/node-config.yaml` -> `filter: "!Env {}"`
+      * in `docker-compose.override.yml` -> `RUST_LOG=info,overwatch=warn,overwatch::overwatch=warn`
 * Setup
   * `sudo apt install protobuf-compiler`
+* Setup lon repo
+  * `git clone ...`
+  * `git submodule update --init --recursive`
+    * `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
 * Run sequencer
+  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
   * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --node-url http://localhost:8081`
 
 
