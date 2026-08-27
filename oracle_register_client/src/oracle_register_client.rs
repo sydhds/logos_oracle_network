@@ -35,8 +35,11 @@ pub fn compute_register_pda(program_id: &ProgramId) -> AccountId {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OracleRegisterInstruction {
-    Initialize,
+    Initialize {
+        token_program_id: program_id,
+    },
     Register {
+        oracle_key: [u8; 32],
         pda_seed: [u8; 32],
     },
 }
@@ -66,8 +69,11 @@ impl<'w> OracleRegisterClient<'w> {
     pub async fn initialize(
         &self,
         accounts: InitializeAccounts,
+        token_program_id: program_id,
     ) -> Result<String, String> {
-        let instruction = OracleRegisterInstruction::Initialize;
+        let instruction = OracleRegisterInstruction::Initialize {
+            token_program_id,
+        };
         let mut account_ids: Vec<AccountId> = vec![
             accounts.register,
             accounts.owner,
@@ -96,9 +102,11 @@ impl<'w> OracleRegisterClient<'w> {
     pub async fn register(
         &self,
         accounts: RegisterAccounts,
+        oracle_key: [u8; 32],
         pda_seed: [u8; 32],
     ) -> Result<String, String> {
         let instruction = OracleRegisterInstruction::Register {
+            oracle_key,
             pda_seed,
         };
         let mut account_ids: Vec<AccountId> = vec![

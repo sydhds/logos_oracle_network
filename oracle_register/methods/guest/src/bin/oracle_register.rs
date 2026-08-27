@@ -53,7 +53,7 @@ pub struct RegisterState {
 }
 */
 
-
+const LON_STAKE_AMOUNT: u128 = 3;
 
 #[lez_program]
 mod oracle_register {
@@ -70,12 +70,15 @@ mod oracle_register {
         mut register: AccountWithMetadata,
         #[account(signer)]
         owner: AccountWithMetadata,
+        token_program_id: ProgramId,
     ) -> SpelResult {
-        let state = RegisterState::default(); /* {
-            owner: *owner.account_id.value(),
-            mtree: OracleMerkleTree::new(),
-            registered: [[0u8; 32]; TREE_CAPACITY],
-        }; */
+        let state = {
+            let mut state = RegisterState::default();
+            // TODO / FIXME: is owner required here?
+            state.owner = *owner.account_id.value();
+            state.token_program_id = token_program_id;
+            state
+        };
         let bytes = borsh::to_vec(&state).map_err(|e| SpelError::SerializationError {
             message: e.to_string(),
         })?;
@@ -101,7 +104,7 @@ mod oracle_register {
         mut to: AccountWithMetadata,
         #[account()]
         token_def_account: AccountWithMetadata,
-        // oracle_key: [u8; 32],
+        oracle_key: [u8; 32],
         pda_seed: [u8; 32],
     ) -> SpelResult {
 
@@ -132,11 +135,11 @@ mod oracle_register {
         })?;
         */
 
-        let pk = [47u8; 32];
-        state.mtree.insert_oracle(pk).map_err(|e| SpelError::Custom { code: 0, message: e.to_string() })?;
+        // let pk = [47u8; 32];
+        state.mtree.insert_oracle(oracle_key).map_err(|e| SpelError::Custom { code: 0, message: e.to_string() })?;
         let registered_idx = state.mtree.next_index.saturating_sub(1) as usize;
         println!("registered_idx: {}", registered_idx);
-        state.registered[registered_idx] = pk;
+        state.registered[registered_idx] = oracle_key;
 
         println!("state registered len: {}", state.registered.len());
         println!("state registered 0: {:?}", state.registered[0]);
@@ -147,7 +150,8 @@ mod oracle_register {
         println!("bytes len: {}", bytes.len());
         register.account.data = bytes.try_into().unwrap();
 
-        let token_pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
+        // let token_pg_id = ProgramId::from([4266428645, 517024648, 1369049673, 1626402537, 3398049368, 2898630437, 1705650675, 3326128479]);
+        let token_pg_id = ProgramId::from(state.token_program_id);
         assert_eq!(token_pg_id, token_def_account.account.program_owner);
 
         // let instruction_init = TokenInstruction::InitializeAccount {};
@@ -209,7 +213,7 @@ mod oracle_register {
         };
 
         // let instruction_data: InstructionData = vec![];
-        let instruction_transfer = TokenInstruction::Transfer { amount_to_transfer: 10 };
+        let instruction_transfer = TokenInstruction::Transfer { amount_to_transfer: LON_STAKE_AMOUNT };
         let instruction_data_transfer = to_vec(&instruction_transfer).unwrap();
         println!("AAC instruction_data transfer: {:?}", instruction_data_transfer);
 
