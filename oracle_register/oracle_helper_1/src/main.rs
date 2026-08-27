@@ -47,6 +47,16 @@ fn get_program_id_from_path(path: &str) -> [u32; 8] {
     digest.into()
 }
 
+fn u32_8_to_hex(array: &[u32; 8]) -> String {
+
+    let mut bytes = [0u8; 32];
+    for (i, &val) in array.iter().enumerate() {
+        bytes[i * 4..(i + 1) * 4].copy_from_slice(&val.to_le_bytes());
+    }
+    // Convert the 32 bytes into a 64-character hex string
+    hex::encode(bytes)
+}
+
 fn main() -> anyhow::Result<()> {
     println!("Oracle register - account & pda seed computation:");
 
@@ -60,6 +70,7 @@ fn main() -> anyhow::Result<()> {
     let program_id = get_program_id_from_path(program_id_path);
 
     println!("oracle register program id: {:?}", program_id);
+    println!("oracle register program hex: {:?}", u32_8_to_hex(&program_id));
 
     // let program_id = [2874761583, 327026999, 624706346, 1458333779, 165510429, 1411387713, 1999370741, 2083561331];
 

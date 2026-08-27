@@ -70,7 +70,7 @@ mod oracle_register {
         mut register: AccountWithMetadata,
         #[account(signer)]
         owner: AccountWithMetadata,
-        token_program_id: ProgramId,
+        token_program_id: [u32; 8],
     ) -> SpelResult {
         let state = {
             let mut state = RegisterState::default();
@@ -108,7 +108,7 @@ mod oracle_register {
         pda_seed: [u8; 32],
     ) -> SpelResult {
 
-        println!("[print] register");
+        println!("[print] register instruction AA");
         eprintln!("[eprint] register");
         println!("oracle register pg id: {:?}", register.account.program_owner);
 

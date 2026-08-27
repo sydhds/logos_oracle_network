@@ -1,12 +1,13 @@
+use std::process;
 // use std::collections::HashMap;
 // use std::path::Path;
 use oracle_register_client::{OracleRegisterClient, RegisterAccounts as OracleRegisterAccounts, RegisterAccounts, RegisterState as OracleRegisterState};
 use anyhow::{anyhow, Context};
 use serde::{Serialize, Deserialize};
-// use spel::tx::execute_instruction;
+use spel::tx::execute_instruction;
 // use spel_framework::idl::SpelIdl;
 use spel_framework::prelude::{AccountId, ProgramId};
-use tracing::info;
+use tracing::{info, debug};
 use wallet::WalletCore;
 
 pub async fn sequencer_register(
@@ -17,8 +18,12 @@ pub async fn sequencer_register(
     let client = OracleRegisterClient::new(&wallet_core, 
                                            ProgramId::from(rc_info.oracle_register_program_id));
 
+    debug!("Fetching oracle register state...");
+    debug!("client program id: {:?}", client.program_id);
     let register_store = client.fetch_register::<OracleRegisterState>().await
         .map_err(|err| anyhow!("{}", err))?;
+
+    debug!("register store fetched...");
 
     if !register_store.registered.contains(&rc_info.oracle_node_id) {
         info!("Oracle node (ID {:?}) not registered", &rc_info.oracle_node_id);
@@ -26,19 +31,40 @@ pub async fn sequencer_register(
 
         let accounts = RegisterAccounts {
             // Oracle register contract account
-            register: AccountId::from(rc_info.oracle_register_account),
-            // An account owned by the oracle node (with tokens; to stake)
-            from: AccountId::from(rc_info.oracle_node_funding_account),
-            // The account was will receive the stake
-            to: AccountId::from(rc_info.oracle_register_to),
+            register: AccountId::new(rc_info.oracle_register_account),
+            // An account owned by the oracle node (holding tokens; that will be transferred for staking)
+            from: AccountId::new(rc_info.oracle_node_funding_account),
+            // The account was will receive the tokens (owned by oracle_register contract)
+            to: AccountId::new(rc_info.oracle_register_to),
             // The account holding the token definition
-            token_def_account: AccountId::from(rc_info.token_definition_account),
+            token_def_account: AccountId::new(rc_info.token_definition_account),
         };
 
-        client.register(accounts, rc_info.oracle_register_to_pda_seed).await
+        let response = client.register(accounts, rc_info.oracle_node_id, rc_info.oracle_register_to_pda_seed).await
             .map_err(|err| anyhow!("{}", err))?;
 
+        debug!("Tx response: {}", response);
+
+        info!("Waiting for confirmation...");
+        let poller = wallet::poller::TxPoller::new(
+            wallet_core.config(),
+            wallet_core.sequencer_client.clone(),
+        );
+
+        let mut tx_hash = [0u8; 32];
+        hex::decode_to_slice(response, &mut tx_hash)?;
+        match poller.poll_tx(tx_hash.into()).await {
+            Ok(_) => {
+                debug!("Transaction confirmed — included in a block.")
+            },
+            Err(err) => {
+                return Err(anyhow!("Transaction not confirmed: {}", err))
+            },
+        }
+
         info!("Register success!");
+    } else {
+        info!("Already registered, nothing to do...");
     }
 
     Ok(())
@@ -88,16 +114,16 @@ pub struct RegisterContractInfo {
     #[serde(with = "hex_32_bytes")]
     pub oracle_node_id: [u8; 32],
 
-    #[serde(with = "hex_32_bytes")]
+    #[serde(with = "bs58_32_bytes")]
     pub oracle_register_account: [u8; 32],
 
-    #[serde(with = "hex_32_bytes")]
+    #[serde(with = "bs58_32_bytes")]
     pub oracle_node_funding_account: [u8; 32],
 
-    #[serde(with = "hex_32_bytes")]
+    #[serde(with = "bs58_32_bytes")]
     pub oracle_register_to: [u8; 32],
 
-    #[serde(with = "hex_32_bytes")]
+    #[serde(with = "bs58_32_bytes")]
     pub token_definition_account: [u8; 32],
 
     #[serde(with = "hex_32_bytes")]
@@ -128,6 +154,7 @@ pub mod hex_u32_8 {
         D: Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
+        println!("AA de on {:?}", s);
         let clean_s = s.strip_prefix("0x").unwrap_or(&s);
         let decoded = hex::decode(clean_s).map_err(serde::de::Error::custom)?;
 
@@ -139,7 +166,7 @@ pub mod hex_u32_8 {
 
         let mut array = [0u32; 8];
         for (i, chunk) in decoded.chunks_exact(4).enumerate() {
-            array[i] = u32::from_be_bytes(chunk.try_into().unwrap());
+            array[i] = u32::from_le_bytes(chunk.try_into().unwrap());
         }
         Ok(array)
     }
@@ -164,7 +191,9 @@ pub mod hex_32_bytes {
     where
         D: Deserializer<'de>,
     {
+
         let s: String = Deserialize::deserialize(deserializer)?;
+        println!("AB de on {:?}", s);
 
         // Strip the "0x" prefix if it exists so hex::decode doesn't panic
         let clean_s = s.strip_prefix("0x").unwrap_or(&s);
@@ -175,6 +204,33 @@ pub mod hex_32_bytes {
         // Ensure it is exactly 32 bytes and convert it to a fixed array
         decoded.try_into().map_err(|_| {
             serde::de::Error::custom("Hex string must represent exactly 32 bytes")
+        })
+    }
+}
+
+pub mod bs58_32_bytes {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::convert::TryInto;
+
+    pub fn serialize<S>(bytes: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = bs58::encode(bytes).into_string();
+        serializer.serialize_str(&s)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<[u8; 32], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let decoded = bs58::decode(&s)
+            .into_vec()
+            .map_err(serde::de::Error::custom)?;
+
+        decoded.try_into().map_err(|_| {
+            serde::de::Error::custom("Base58 string must decode to exactly 32 bytes")
         })
     }
 }

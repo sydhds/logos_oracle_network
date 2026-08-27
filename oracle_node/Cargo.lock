@@ -8577,6 +8577,7 @@ name = "sequencer"
 version = "0.2.1"
 dependencies = [
  "anyhow",
+ "bs58",
  "clap",
  "common 0.2.1",
  "dashmap",

@@ -223,9 +223,9 @@ fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
         let mut key_bytes = [0u8; ED25519_SECRET_KEY_SIZE];
         let mut rng = rand::thread_rng();
         rng.fill(&mut key_bytes);
-        println!("writing key file to: {}", path.display());
+        println!("Start writing key file to: {}", path.display());
         fs::write(path, key_bytes)
-            .context(format!("Writing key file to {}", path.display()))?
+            .context(format!("Error while writing key file to {}", path.display()))?
             // .expect("failed to write key file")
             ;
         Ok(Ed25519Key::from_bytes(&key_bytes))

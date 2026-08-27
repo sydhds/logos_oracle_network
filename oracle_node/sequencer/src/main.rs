@@ -41,7 +41,9 @@ use common::time_info_poll;
 #[tokio::main]
 async fn main() {
     let args = SequencerArgs::parse();
-    drop(run(args).await);
+    if let Err(err) = run(args).await {
+        error!("Error: {:#?}", err);
+    }
 }
 
 pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
@@ -71,7 +73,8 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         args.data_folder.join(&args.checkpoint_path),
         price_map.clone(),
         price_feed_eth_usdt.to_string()
-    ).context("Failed to initialize sequencer")?;
+    )
+        .context("Failed to initialize sequencer")?;
 
     // Setup queues
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -86,15 +89,12 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     // Register (or check it is already registered) to oracle_register contract
     {
-        let file = std::fs::File::open(args.register_contract_config)?;
+        let file = std::fs::File::open(args.register_contract_config.as_path())
+            .context(format!("Reading {}", args.register_contract_config.as_path().display()))?;
         let reader = std::io::BufReader::new(file);
         let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
-
-        info!("cfg: {:?}", cfg);
-
+        debug!("oracle register cfg: {:?}", cfg);
         let _ = sequencer_register(cfg).await?;
-
-        panic!("===");
     }
 
     let mut set = JoinSet::new();

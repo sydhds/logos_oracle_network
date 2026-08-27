@@ -36,7 +36,7 @@ pub fn compute_register_pda(program_id: &ProgramId) -> AccountId {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OracleRegisterInstruction {
     Initialize {
-        token_program_id: program_id,
+        token_program_id: [u32; 8],
     },
     Register {
         oracle_key: [u8; 32],
@@ -69,7 +69,7 @@ impl<'w> OracleRegisterClient<'w> {
     pub async fn initialize(
         &self,
         accounts: InitializeAccounts,
-        token_program_id: program_id,
+        token_program_id: [u32; 8],
     ) -> Result<String, String> {
         let instruction = OracleRegisterInstruction::Initialize {
             token_program_id,
