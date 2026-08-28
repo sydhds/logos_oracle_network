@@ -4,6 +4,8 @@ mod monitor;
 mod zone_state;
 mod args;
 mod register_contract;
+mod binance_fetch;
+mod redstone_fetch;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
@@ -34,7 +36,8 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberI
 // internal
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
-use crate::pyth_fetch::fetch_price;
+// use crate::pyth_fetch::fetch_price;
+use crate::redstone_fetch::fetch_price;
 use crate::register_contract::{sequencer_register, RegisterContractInfo};
 use common::time_info_poll;
 
@@ -55,7 +58,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     // println!("Hello, world!");
 
-    let pyth_base_url = "https://hermes.pyth.network/v2/updates/price/stream";
+    // let pyth_base_url = "https://hermes.pyth.network/v2/updates/price/stream";
     let price_feed_eth_usdt = "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace";
 
     let price_map = {
@@ -99,7 +102,22 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     let mut set = JoinSet::new();
     set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
-    set.spawn(async move { fetch_price(pyth_base_url, price_feed_eth_usdt, tx).await });
+    // Pyth
+    /*
+    set.spawn(async move { fetch_price(
+        args.pyth_url.as_str(),
+        args.pyth_bearer.as_str(),
+        price_feed_eth_usdt,
+        tx).await
+    });
+    */
+    // Redstone
+    set.spawn(async move { fetch_price(
+            price_feed_eth_usdt,
+            "redstone",
+            tx
+        ).await
+    });
     set.spawn(async move { price_monitor.run(&mut rx).await });
     // FIXME: wait_ready ?
     set.spawn(async move { sequencer.run().await });

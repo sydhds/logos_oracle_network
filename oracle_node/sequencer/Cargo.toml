@@ -42,6 +42,9 @@ reqwest-eventsource = "0.6"
 futures.workspace = true
 dashmap = "6.2.1"
 uuid = { version = "1.23.3", features = ["v4", "serde"] }
+# Binance fetch
+futures-util = "0.3.33"
+tokio-tungstenite = "0.30.0"
 # lon rfc
 prost = "0.14" # grpc
 pyth-sdk = "0.8" # price decimal conversion
@@ -50,6 +53,7 @@ secp256k1 = { version = "0.29", features = ["rand", "hashes"] } # BIP-340 x-only
 spel-framework = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
 spel = { git = "https://github.com/logos-co/spel.git", tag = "v0.6.0" }
 wallet  = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.2.0" }
+sha2 = "0.10.9"
 
 # internal
 common =  { path = "../common" }

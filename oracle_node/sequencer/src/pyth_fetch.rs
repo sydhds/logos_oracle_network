@@ -1,3 +1,4 @@
+use anyhow::Context;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_eventsource::{Event, EventSource};
@@ -10,6 +11,7 @@ use common::HermesPriceEvent;
 
 pub async fn fetch_price(
     hermes_price_url: &str,
+    hermes_bearer: &str,
     price_id: &str,
     price_update_queue: UnboundedSender<HermesPriceEvent>) -> anyhow::Result<()>
 {
@@ -30,7 +32,10 @@ pub async fn fetch_price(
     loop {
         info!("Connecting to Pyth Hermes SSE stream...");
 
-        let mut event_source = EventSource::new(client.get(&url)).unwrap();
+        let mut event_source = EventSource::new(client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", hermes_bearer))
+        ).context("While creating Pyth Hermes SSE stream conn")?;
 
         while let Some(event) = event_source.next().await {
             match event {

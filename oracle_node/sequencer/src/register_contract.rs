@@ -6,17 +6,18 @@ use anyhow::{anyhow, Context};
 use serde::{Serialize, Deserialize};
 use spel::tx::execute_instruction;
 // use spel_framework::idl::SpelIdl;
-use spel_framework::prelude::{AccountId, ProgramId};
+use spel_framework::prelude::{seed_from_str, AccountId, ProgramId, compute_pda_multi, ToSeed};
 use tracing::{info, debug};
 use wallet::WalletCore;
+use sha2::{Sha256, Digest};
 
 pub async fn sequencer_register(
     rc_info: RegisterContractInfo,
 ) -> anyhow::Result<()> {
     
     let wallet_core = WalletCore::from_env()?;
-    let client = OracleRegisterClient::new(&wallet_core, 
-                                           ProgramId::from(rc_info.oracle_register_program_id));
+    let oracle_register_program_id = ProgramId::from(rc_info.oracle_register_program_id);
+    let client = OracleRegisterClient::new(&wallet_core, oracle_register_program_id);
 
     debug!("Fetching oracle register state...");
     debug!("client program id: {:?}", client.program_id);
@@ -29,18 +30,28 @@ pub async fn sequencer_register(
         info!("Oracle node (ID {:?}) not registered", &rc_info.oracle_node_id);
         info!("Registering...");
 
+        let to_account = compute_vault_pda(&oracle_register_program_id, &rc_info.oracle_node_id);
+        let to_account_pda_seed = vault_pda_seed_bytes(&rc_info.oracle_node_id);
+
         let accounts = RegisterAccounts {
             // Oracle register contract account
             register: AccountId::new(rc_info.oracle_register_account),
             // An account owned by the oracle node (holding tokens; that will be transferred for staking)
             from: AccountId::new(rc_info.oracle_node_funding_account),
             // The account was will receive the tokens (owned by oracle_register contract)
-            to: AccountId::new(rc_info.oracle_register_to),
+            // to: AccountId::new(rc_info.oracle_register_to),
+            to: to_account,
             // The account holding the token definition
             token_def_account: AccountId::new(rc_info.token_definition_account),
         };
 
-        let response = client.register(accounts, rc_info.oracle_node_id, rc_info.oracle_register_to_pda_seed).await
+        let response = client.register(
+            accounts,
+            rc_info.oracle_node_id,
+            // rc_info.oracle_register_to_pda_seed
+            to_account_pda_seed
+        )
+            .await
             .map_err(|err| anyhow!("{}", err))?;
 
         debug!("Tx response: {}", response);
@@ -103,6 +114,24 @@ async fn sequencer_register(idl: &SpelIdl, program_id_hex: &str) -> anyhow::Resu
 }
 */
 
+const ORACLE_REGISER_LITERAL: &str = "oracle_register__";
+
+/// Raw seed bytes for the vault PDA, for inclusion in a `Register` instruction's `pda_seeds`.
+/// Vault seed: [literal("oracle_register__"), arg("create_key")]
+pub fn vault_pda_seed_bytes(create_key: &[u8; 32]) -> [u8; 32] {
+
+    let tag = seed_from_str(ORACLE_REGISER_LITERAL);
+    let mut hasher = Sha256::new();
+    hasher.update(tag);
+    hasher.update(create_key);
+    hasher.finalize().into()
+}
+
+/// PDA for the multisig vault account.
+pub fn compute_vault_pda(program_id: &ProgramId, create_key: &[u8; 32]) -> AccountId {
+    let tag = seed_from_str(ORACLE_REGISER_LITERAL);
+    compute_pda_multi(program_id, &[&tag as &dyn ToSeed, create_key])
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RegisterContractInfo {

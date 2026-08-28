@@ -61,7 +61,8 @@ Note:
   * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
   * dev build: `cp -v /home/ubuntu/local_target/oracle_register/riscv-guest/oracle_register-methods/oracle_register-guest/riscv32im-risc0-zkvm-elf/release/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin`
 * `make deploy`
-* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
+* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3 --token-program-id 0,0,...`
+  * token program id can computed using: `lon_helpers` (FIXME / TODO: commit or find a better place)
 * Register an oracle node:
   * Generate `pda_seed` + `to` account: `cd oracle_helper_1 && cargo run`
   * `spel register --token-def-account 3R413ZmQ7yETsNCEVHmVD4ju9z2GP9HLTEMQb3Ps85rx --oracle-key 0000000000000000000000000000000000000000000000000000000000000001 --from EJg2dB2YWZTQjbBvz3VEhEM2mgvXNRrZ9CkXM6nwXugb --to Egmcm7LRjeEZYPNGNDKd1m81jSjkbpwvZ75Lh6kAdbDn --pda-seed d546e7902066da243a0efa4e4d716b7f78356fa6632adb563fb74ce0a0366d73`
@@ -147,7 +148,12 @@ Note:
   * `git submodule update --init --recursive`
     * `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
 * Run sequencer
+  * Edit `rc_1.json` with some contract info
+    * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
+    * `oracle_node_id`: an hexadecimal string identifying the oracle node (for test, can be: `0000000000000000000000000000000000000000000000000000000000000001`)
+    * `oracle_register_account`: the PDA where oracle_register has been deployed (find when init: `register → 5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk (PDA)`
+    * `oracle_node_funding_account`: an account owned by oracle node that have some LON tokens (for staking)
+    * `token_definition_account`: the account that hold the LON token definition 
   * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --node-url http://localhost:8081`
-
+  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer/ --register-contract-config ./rc_1.json`
 

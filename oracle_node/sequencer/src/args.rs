@@ -64,6 +64,12 @@ pub struct SequencerArgs {
     #[arg(long, default_value = "channel.txt", env = "CHANNEL_PATH")]
     pub channel_path: PathBuf,
 
+    #[arg(long, default_value = "https://pyth.dourolabs.app/hermes/v2/updates/price/stream")]
+    pub(crate) pyth_url: String,
+
+    #[arg(long, help = "Pyth network bearer")]
+    pub(crate) pyth_bearer: String,
+
     #[arg(long, default_value = "register_contract_config.json")]
     pub register_contract_config: PathBuf,
 }

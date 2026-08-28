@@ -28,6 +28,7 @@ tokio = { default-features = false, features = [
     "sync",
 ], version = "1" }
 lb-http-api-common = { workspace = true }
+rust_decimal = "1.42.1"
 
 [dev-dependencies]
 wiremock = "0.6"
