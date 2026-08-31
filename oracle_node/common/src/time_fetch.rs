@@ -7,7 +7,10 @@ use tokio::{
     time::sleep
 };
 use lb_http_api_common::paths;
-use tracing::{debug, error, info};
+use tracing::{
+    // debug,
+    error, info
+};
 
 /// Logos rest API
 /// https://deepwiki.com/logos-blockchain/logos-blockchain/7.1-http-api-reference

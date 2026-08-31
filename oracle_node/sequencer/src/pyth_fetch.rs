@@ -75,6 +75,6 @@ pub async fn fetch_price(
         retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(30));
     }
 
-    Ok(())
+    // Ok(())
 }
 

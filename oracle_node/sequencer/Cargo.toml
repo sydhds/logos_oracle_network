@@ -44,7 +44,7 @@ dashmap = "6.2.1"
 uuid = { version = "1.23.3", features = ["v4", "serde"] }
 # Binance fetch
 futures-util = "0.3.33"
-tokio-tungstenite = "0.30.0"
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-native-roots"] }
 # lon rfc
 prost = "0.14" # grpc
 pyth-sdk = "0.8" # price decimal conversion

@@ -148,12 +148,12 @@ Note:
   * `git submodule update --init --recursive`
     * `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
 * Run sequencer
-  * Edit `rc_1.json` with some contract info
+  * Edit `resources/register_contract_config.json` with some contract info
     * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
     * `oracle_node_id`: an hexadecimal string identifying the oracle node (for test, can be: `0000000000000000000000000000000000000000000000000000000000000001`)
     * `oracle_register_account`: the PDA where oracle_register has been deployed (find when init: `register → 5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk (PDA)`
     * `oracle_node_funding_account`: an account owned by oracle node that have some LON tokens (for staking)
     * `token_definition_account`: the account that hold the LON token definition 
   * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
-  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer/ --register-contract-config ./rc_1.json`
+  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer`
 

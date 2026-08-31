@@ -1,24 +1,23 @@
 use std::sync::Arc;
-// use tokio::select;
 use tokio::sync::mpsc::UnboundedReceiver;
 use dashmap::DashMap;
 use tracing::{info, error};
 // external deps
-use common::{HermesPriceEvent, ParsedUpdate};
+use common::PartialPriceObservation;
 
 pub struct PriceMonitor {
-    map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
+    map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
 }
 
 impl PriceMonitor {
 
-    pub fn new(map: Arc<DashMap<String, Vec<ParsedUpdate>>>) -> Self {
+    pub fn new(map: Arc<DashMap<String, Vec<PartialPriceObservation>>>) -> Self {
         Self { map }
     }
 
     pub async fn run(&self,
-                     price_update_queue: &mut UnboundedReceiver<HermesPriceEvent>,
-                     /* price_request_queue: &mut UnboundedReceiver<> */) -> anyhow::Result<()> {
+                     price_update_queue: &mut UnboundedReceiver<PartialPriceObservation>,
+    ) -> anyhow::Result<()> {
 
         info!("Starting price monitor...");
 
@@ -26,16 +25,12 @@ impl PriceMonitor {
             let price_update = price_update_queue.recv().await;
             let Some(price_update) = price_update else { error!("Channel closed"); break; };
 
-            // info!("Got price update: {:?}", price_update);
-            if let Some(mut parsed) = price_update.parsed {
-                // info!("Got price update parsed: {:?}", parsed);
-                let parsed_0 = std::mem::take(&mut parsed[0]);
-                // To avoid a clone here (on parsed_0, when using or_insert) we expect the entry to be already present
-                self.map
-                    .entry(parsed_0.id.clone())
-                    .and_modify(|e| e.push(parsed_0))
-                    ;
-            }
+            let feed_id_key = price_update.feed_id.clone();
+            self
+                .map
+                .entry(feed_id_key)
+                .and_modify(|v| v.push(price_update.clone()))
+                .or_insert(vec![price_update]);
         }
 
         Ok(())

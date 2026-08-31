@@ -12,32 +12,30 @@ pub mod lon {
 }
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 use std::sync::Arc;
 // third-party
 use crate::sequencer::Sequencer;
-use anyhow::Context;
-use spel_framework::prelude::AccountId;
+use anyhow::{anyhow, Context};
+// use spel_framework::prelude::AccountId;
 use clap::Parser;
 use dashmap::DashMap;
-// use futures::AsyncWriteExt;
 use tokio::task::JoinSet;
-use serde::{Serialize, Deserialize};
-use serde_json;
+use serde::Deserialize;
 use tracing::{
     info,
     debug,
-    warn,
+    // warn,
     error,
     level_filters::LevelFilter
 };
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
+use url::Url;
 // internal
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
-// use crate::pyth_fetch::fetch_price;
-use crate::redstone_fetch::fetch_price;
+// use crate::redstone_fetch::fetch_price;
 use crate::register_contract::{sequencer_register, RegisterContractInfo};
 use common::time_info_poll;
 
@@ -56,16 +54,19 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     info!("Starting oracle node sequencer...");
     debug!("args: {:?}", &args);
 
-    // println!("Hello, world!");
+    let cfg = parse_provider_config(args.provider_config.as_path())
+        .context(format!("while parsing provider config: {}", args.provider_config.display()))?;
+    
+    let provider = "binance";
+    let price_feed_normalized = "ETH/USD";
+    let price_feed_url = cfg.endpoints.get(provider).ok_or(anyhow!("Cannot get an url for provider"))?;
+    let price_feed_provider = cfg.feeds.get(provider)
+        .ok_or(anyhow!("Cannot get feeds for provider"))?
+        .get(price_feed_normalized)
+        .ok_or(anyhow!("Cannot get price feed provider"))?
+        .clone();
 
-    // let pyth_base_url = "https://hermes.pyth.network/v2/updates/price/stream";
-    let price_feed_eth_usdt = "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace";
-
-    let price_map = {
-        let mut map = DashMap::new();
-        map.insert(price_feed_eth_usdt.to_string(), vec![]);
-        Arc::new(map)
-    };
+    let price_map = Arc::new(DashMap::new());
 
     let mut sequencer = Sequencer::new(
         &args.node_rest_url,
@@ -75,13 +76,12 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         args.node_auth_password,
         args.data_folder.join(&args.checkpoint_path),
         price_map.clone(),
-        price_feed_eth_usdt.to_string()
+        price_feed_normalized.to_string()
     )
         .context("Failed to initialize sequencer")?;
 
     // Setup queues
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    // let (tx2, mut rx2) = tokio::sync::mpsc::unbounded_channel();
 
     // Setup price monitor
     let price_monitor = PriceMonitor::new(price_map.clone());
@@ -97,27 +97,37 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         let reader = std::io::BufReader::new(file);
         let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
         debug!("oracle register cfg: {:?}", cfg);
-        let _ = sequencer_register(cfg).await?;
+        sequencer_register(cfg).await?;
     }
 
     let mut set = JoinSet::new();
     set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
-    // Pyth
-    /*
-    set.spawn(async move { fetch_price(
-        args.pyth_url.as_str(),
-        args.pyth_bearer.as_str(),
-        price_feed_eth_usdt,
-        tx).await
-    });
-    */
-    // Redstone
-    set.spawn(async move { fetch_price(
-            price_feed_eth_usdt,
-            "redstone",
-            tx
-        ).await
-    });
+
+    match provider {
+        "binance" => {
+            // Binance uses: "btcusdt"
+            let url_str = format!("{}/{}@ticker", price_feed_url, price_feed_provider.to_lowercase());
+            let url = Url::parse(&url_str).expect("Failed to parse Binance WS URL");
+            set.spawn(async move {
+                binance_fetch::fetch_price(
+                    url,
+                    price_feed_provider.as_str(),
+                    price_feed_normalized,
+                    tx
+                ).await
+            });
+        },
+        "redstone" => {
+            todo!()
+        },
+        "pyth" => {
+            todo!()
+        },
+        _ => {
+            unimplemented!()
+        }
+    }
+
     set.spawn(async move { price_monitor.run(&mut rx).await });
     // FIXME: wait_ready ?
     set.spawn(async move { sequencer.run().await });
@@ -157,5 +167,51 @@ fn setup_tracing() {
         .init();
 }
 
+type NormalizedFeed = String;
+type ProviderName = String;
+type ProviderFeed = String;
+
+#[derive(Debug, Deserialize)]
+pub struct PriceProviderConfig {
+    pub endpoints: HashMap<String, String>, // TODO: ProviderName, Url
+    pub feeds: HashMap<ProviderName, HashMap<NormalizedFeed, ProviderFeed>>,
+}
+
+fn parse_provider_config(json_cfg: &Path) -> anyhow::Result<PriceProviderConfig> {
+
+    #[derive(Debug, Deserialize)]
+    pub struct PriceProviderConfigRaw {
+        pub endpoints: HashMap<String, String>,
+        pub feeds: HashMap<NormalizedFeed, HashMap<ProviderName, ProviderFeed>>,
+    }
+
+    let json_reader = std::fs::File::open(json_cfg)?;
+    let cfg_raw: PriceProviderConfigRaw = serde_json::from_reader(json_reader)?;
+
+    let cfg = {
+
+        let mut cfg_ = PriceProviderConfig {
+            endpoints: cfg_raw.endpoints,
+            feeds: HashMap::new(),
+        };
+
+        for (normalized_feed, providers) in cfg_raw.feeds {
+            for (provider, provider_feed) in providers {
+                // Skip empty string entries
+                if !provider_feed.trim().is_empty() {
+                    cfg_.feeds
+                            .entry(provider)
+                            .or_default()
+                            .insert(normalized_feed.clone(), provider_feed);
+                }
+            }
+        }
+
+        cfg_
+
+    };
+
+    Ok(cfg)
+}
 
 

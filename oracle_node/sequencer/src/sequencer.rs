@@ -8,7 +8,6 @@ use dashmap::DashMap;
 use rand::Rng;
 use url::Url;
 use prost::Message;
-use pyth_sdk::Price;
 use secp256k1::{Keypair, Secp256k1, XOnlyPublicKey};
 use secp256k1::hashes::{sha256, Hash, sha256d};
 use tracing::{info, debug, error};
@@ -17,21 +16,19 @@ use logos_blockchain_zone_sdk::{
     adapter::NodeHttpClient,
     sequencer::{
         Event, SequencerCheckpoint,
-        // SequencerHandle,
-        SequencerClient, ZoneSequencer
+        SequencerClient,
+        ZoneSequencer
     },
 };
 use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
-use lb_core::mantle::ops::channel::{ChannelId, inscribe::Inscription};
-use lb_core::mantle::ops::channel::inscribe::MAX_BYTES;
+use lb_core::mantle::ops::channel::{
+    ChannelId,
+    inscribe::{Inscription, MAX_BYTES},
+};
 use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key};
-use lb_core::codec::DeserializeOp;
 // internal
 use crate::zone_state::InMemoryZoneState;
-use common::{
-    ParsedUpdate,
-    // PriceInfo
-};
+use common::{ParsedUpdate, PartialPriceObservation};
 use crate::lon::PriceObservation;
 
 pub struct Sequencer {
@@ -41,7 +38,7 @@ pub struct Sequencer {
     state: InMemoryZoneState,
     // pub queue_file: String,
     pub checkpoint_path: PathBuf,
-    price_map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
+    price_map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
     price_feed: String,
     // oracle pubk
     oracle_pubkey: Keypair,
@@ -58,7 +55,7 @@ impl Sequencer {
         // queue_file: &str,
         checkpoint_path: PathBuf,
         // channel_path: &str,
-        price_map: Arc<DashMap<String, Vec<ParsedUpdate>>>,
+        price_map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
         price_feed: String,
     ) -> anyhow::Result<Self> {
 
@@ -122,12 +119,13 @@ impl Sequencer {
 
             loop {
 
-                // info!("Loop start...");
-
                 // take prices from price_map
-                let prices: Vec<ParsedUpdate> = std::mem::take(
-                    price_map.get_mut(&price_feed).unwrap().value_mut()
-                );
+                let prices = if let Some(mut price_feed_ref_mut) = price_map.get_mut(&price_feed) {
+                    std::mem::take(price_feed_ref_mut.value_mut())
+                } else {
+                    continue
+                };
+
                 // info!("price map: {:?}", price_map);
                 let Some(price_latest) = prices.last() else {
                     // info!("No prices...");
@@ -139,20 +137,22 @@ impl Sequencer {
                 // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
                 // TODO: convert price_latest into PriceObservation
                 info!("price_latest: {:?}", price_latest);
+                /*
                 let scaled_pyth_price = Price {
                     price: price_latest.price.price.parse::<i64>().unwrap(),
                     conf: price_latest.price.conf.parse::<u64>().unwrap(),
                     expo: price_latest.price.expo,
                     publish_time: price_latest.price.publish_time,
                 }.scale_to_exponent(-6).expect("Price exceeds maximum representable bounds for target exponent");
+                */
 
                 let obs = {
                     let mut obs = PriceObservation {
-                        feed_id: price_latest.id.to_uppercase(),
-                        price: scaled_pyth_price.price,
-                        decimals: 6,
+                        feed_id: price_latest.feed_id.clone(),
+                        price: price_latest.price,
+                        decimals: price_latest.decimals,
                         round: 1045, // TODO: need Logos RPC doc
-                        timestamp: price_latest.price.publish_time,
+                        timestamp: price_latest.timestamp,
                         oracle_id: pubk.serialize().to_vec(),
                         signature: vec![],
                         membership_proof: vec![], // TODO: need LEZ register contract
@@ -195,7 +195,7 @@ impl Sequencer {
                 interval.tick().await;
             }
 
-            Ok::<(), anyhow::Error>(())
+            // Ok::<(), anyhow::Error>(())
         });
 
         loop {
@@ -232,7 +232,7 @@ fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
     }
 }
 
-fn generate_oracle_credentials(path: &Path) -> anyhow::Result<Keypair> {
+fn generate_oracle_credentials(_path: &Path) -> anyhow::Result<Keypair> {
     let secp = Secp256k1::new();
     let mut rng = rand::thread_rng();
     let keypair = Keypair::new(&secp, &mut rng);

@@ -2,27 +2,27 @@ use futures_util::StreamExt;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::connect_async;
-use tracing::error;
+use tracing::{info, error};
 use url::Url;
 
 use common::{BinancePriceEvent, PartialPriceObservation};
 
-pub async fn fetch_price(symbol: &str, symbol_normalized: &str, price_update_queue: UnboundedSender<PartialPriceObservation>) {
+pub async fn fetch_price(
+    url: Url,
+    price_feed: &str,
+    price_feed_normalized: &str,
+    price_update_queue: UnboundedSender<PartialPriceObservation>) -> anyhow::Result<()> {
 
-    let symbol_normalized = symbol_normalized.to_string();
-
-    // Binance uses: "btcusdt"
-    let url_str = format!("wss://stream.binance.com:9443/ws/{}@ticker", symbol.to_lowercase());
-    let url = Url::parse(&url_str).expect("Failed to parse Binance WS URL");
+    let price_feed_normalized = price_feed_normalized.to_string();
 
     let mut retry_delay = Duration::from_secs(1);
 
     loop {
-        println!("Connecting to Binance WebSocket stream for {}...", symbol);
+        info!("Connecting to Binance WebSocket stream ({}) for price feed: {}...", url, price_feed);
 
         match connect_async(url.as_str()).await {
             Ok((ws_stream, _)) => {
-                println!("Binance connection opened successfully!");
+                info!("Binance connection opened successfully!");
                 retry_delay = Duration::from_secs(1); // Reset backoff on success
 
                 let (_, mut read) = ws_stream.split();
@@ -36,8 +36,13 @@ pub async fn fetch_price(symbol: &str, symbol_normalized: &str, price_update_que
                                 match serde_json::from_str::<BinancePriceEvent>(text) {
                                     Ok(update_event) => {
 
+                                        if update_event.symbol != price_feed {
+                                            error!("Binance price event symbol: {}, expected: {}", update_event.symbol, price_feed);
+                                            continue;
+                                        }
+
                                         match PartialPriceObservation::try_from(
-                                            (symbol_normalized.to_string(), update_event)) {
+                                            (price_feed_normalized.to_string(), update_event)) {
                                             Ok(price_obs) => {
                                                 if let Err(e) = price_update_queue.send(price_obs) {
                                                     error!("Error while sending price update event: {}", e);
@@ -47,8 +52,6 @@ pub async fn fetch_price(symbol: &str, symbol_normalized: &str, price_update_que
                                                 error!("Error while converting event to price update event: {}", e);
                                             }
                                         }
-
-
                                     },
                                     Err(err) => {
                                         error!("Failed to parse Binance JSON: {}\nRaw data: {}", err, text);
@@ -64,11 +67,11 @@ pub async fn fetch_price(symbol: &str, symbol_normalized: &str, price_update_que
                 }
             }
             Err(e) => {
-                eprintln!("Failed to connect to Binance: {}", e);
+                error!("Failed to connect to Binance: {:#?}", e);
             }
         }
 
-        println!("Reconnecting in {} seconds...", retry_delay.as_secs());
+        info!("Reconnecting in {} seconds...", retry_delay.as_secs());
         sleep(retry_delay).await;
 
         // Exponential backoff capped at 30 seconds[cite: 3]
