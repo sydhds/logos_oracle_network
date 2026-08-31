@@ -26,7 +26,7 @@ impl TryFrom<(String, BinancePriceEvent)> for PartialPriceObservation {
         let scaled_i64 = decimal.mantissa() as i64;
         Ok(Self {
             feed_id: feed_id_normalized,
-            feed_id_provider: event.last_price,
+            feed_id_provider: event.symbol,
             price: scaled_i64,
             decimals: PRICE_OBSERVATION_DECIMAL as i32,
             timestamp: event.event_time.try_into()?,

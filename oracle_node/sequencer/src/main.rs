@@ -57,7 +57,8 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let cfg = parse_provider_config(args.provider_config.as_path())
         .context(format!("while parsing provider config: {}", args.provider_config.display()))?;
     
-    let provider = "binance";
+    // let provider = "binance";
+    let provider = "redstone";
     let price_feed_normalized = "ETH/USD";
     let price_feed_url = cfg.endpoints.get(provider).ok_or(anyhow!("Cannot get an url for provider"))?;
     let price_feed_provider = cfg.feeds.get(provider)
@@ -118,7 +119,18 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
             });
         },
         "redstone" => {
-            todo!()
+            // Can be: redstone, redstone-rapid, redstone-stocks, redstone-custom-urls
+            let redstone_provider = "redstone";
+            let url_str = format!("https://api.redstone.finance/prices?symbol={}&provider={}", price_feed_provider, redstone_provider);
+            let url = Url::parse(&url_str).expect("Failed to parse Binance WS URL");
+            set.spawn(async move {
+                redstone_fetch::fetch_price(
+                    url,
+                    price_feed_provider.as_str(),
+                    price_feed_normalized,
+                    tx
+                ).await
+            });
         },
         "pyth" => {
             todo!()
