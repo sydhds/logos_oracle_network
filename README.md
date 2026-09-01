@@ -147,7 +147,7 @@ Note:
 * Setup lon repo
   * `git clone ...`
   * `git submodule update --init --recursive`
-    * `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
+    * Fix submodule update: `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
 * Run sequencer
   * Edit `resources/register_contract_config.json` with some contract info
     * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
