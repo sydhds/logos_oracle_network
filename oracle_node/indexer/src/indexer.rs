@@ -8,12 +8,14 @@ use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
 use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 use reqwest::Url;
 use tracing::{error, info, warn};
-use common::TimeInfo;
+use common::{RegisterContractInfo, TimeInfo};
 use crate::indexer::lon::{AttestedPrice, PriceObservation};
 use prost::Message;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use crate::register_contract::fetch_registered;
+use sha2::{Digest, Sha256};
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
@@ -76,7 +78,7 @@ impl Indexer {
                         // Instantly grab the latest polled channels without network I/O
                         let latest_channels = self.channels_rx.borrow().clone();
 
-                        // News channels -> spawn tokio task
+                        // News channels -> spawn tokio task (channel_worker)
                         for new_id in latest_channels.difference(&current_channels) {
                             info!("Spawning worker for new channel: {}", hex::encode(new_id.as_ref()));
                             // let handle = self.spawn_channel_worker(new_id.clone(), tx.clone());
@@ -120,7 +122,7 @@ impl Indexer {
                     let feed_id = price_obs.feed_id.clone();
 
                     // Get the queue to send our PriceObservation to the corresponding feed workers
-                    let mut tx = match self.feed_workers.entry(feed_id.clone()) {
+                    let tx = match self.feed_workers.entry(feed_id.clone()) {
                         Entry::Occupied(entry) => entry.into_mut().clone(),
                         Entry::Vacant(entry) => {
                             info!("Spawning new processor for feed: {}", feed_id);
@@ -207,12 +209,15 @@ async fn channel_worker(
 }
 
 /// Query SC for updated channel ids
-pub async fn channel_discover(poll_interval: Duration, tx: watch::Sender<HashSet<ChannelId>>) {
+pub async fn channel_discover(poll_interval: Duration, tx: watch::Sender<HashSet<ChannelId>>, rc_info: RegisterContractInfo) {
+
     loop {
-        // FIXME: query the SC for updated channel ids
-        match mock_query_contract_for_channels().await {
+        match fetch_registered(&rc_info).await {
             Ok(channels_vec) => {
-                let channels_set: HashSet<ChannelId> = channels_vec.into_iter().collect();
+                let channels_set: HashSet<ChannelId> = channels_vec
+                    .into_iter()
+                    .map(|channel_id| ChannelId::from(channel_id))
+                    .collect();
 
                 // Push the new state. Receivers can grab this instantly without blocking.
                 if tx.send(channels_set).is_err() {
@@ -279,10 +284,19 @@ async fn price_feed_worker(
                         let attested_median = compute_median(prices);
 
                         // Assuming all valid obs have the same decimals, grab from the first
-                        let decimals = current_round_observations.first().map(|o| o.decimals).unwrap_or(6);
+                        // TODO: filter if some the required decimals
+                        let decimals = current_round_observations
+                            .first()
+                            .map(|o| o.decimals)
+                            .unwrap_or(6); // TODO: no hardcoded value
+
+                        let feed_id: [u8; 32] = {
+                            let r = Sha256::digest(cfg.feed_id.clone());
+                            r.into()
+                        };
 
                         let attested_price = AttestedPrice {
-                            feed_id: cfg.feed_id.clone(),
+                            feed_id: feed_id.to_vec(),
                             price: attested_median,
                             decimals,
                             valid_count: obs_count as u32,
@@ -293,7 +307,9 @@ async fn price_feed_worker(
                         info!("[Feed {}] Attested round {}: Price {}, Count {}",
                               cfg.feed_id, current_round, attested_price.price, obs_count);
 
-                        // TODO: Send AttestedPrice to LEZ contract
+
+
+
                     } else {
                         warn!("[Feed {}] Round {} missed quorum ({} < {})",
                               cfg.feed_id, current_round, obs_count, cfg.quorum_threshold);
@@ -355,7 +371,9 @@ fn compute_median(mut prices: Vec<i64>) -> i64 {
     }
 }
 
+/*
 async fn mock_query_contract_for_channels() -> anyhow::Result<Vec<ChannelId>> {
     // TODO
     Ok(vec![])
 }
+*/

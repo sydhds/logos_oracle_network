@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -22,4 +23,7 @@ pub struct IndexerArgs {
     /// Basic auth password for node endpoint
     #[arg(long, env = "INDEXER_NODE_AUTH_PASSWORD")]
     pub node_auth_password: Option<String>,
+
+    #[arg(long, default_value = "resources/register_contract_config.json")]
+    pub register_contract_config: PathBuf,
 }

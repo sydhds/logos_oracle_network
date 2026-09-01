@@ -35,9 +35,8 @@ use url::Url;
 // internal
 use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
-// use crate::redstone_fetch::fetch_price;
-use crate::register_contract::{sequencer_register, RegisterContractInfo};
-use common::time_info_poll;
+use crate::register_contract::sequencer_register;
+use common::{time_info_poll, RegisterContractInfo};
 
 #[tokio::main]
 async fn main() {

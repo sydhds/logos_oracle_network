@@ -18,6 +18,8 @@ serde_json.workspace = true
 reqwest = { workspace = true, default-features = false, features = ["json"]}
 tracing = { workspace = true }
 anyhow = { workspace = true }
+hex = { workspace = true }
+bs58 = { version = "0.5.1" }
 tokio = { default-features = false, features = [
     "io-std",
     "io-util",

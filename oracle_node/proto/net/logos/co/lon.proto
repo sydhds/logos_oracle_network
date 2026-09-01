@@ -19,7 +19,7 @@ message PriceObservation {
 }
 
 message AttestedPrice {
-  string feed_id      = 1;  // asset pair identifier, e.g. "BTC/USDT"
+  bytes  feed_id      = 1;  // asset pair identifier, e.g. sha256("BTC/USDT")
   int64  price        = 2;  // attested median, real value = price * 10^(-decimals)
   int32  decimals     = 3;  // number of decimal places in `price`
   uint32 valid_count  = 4;  // number of observations aggregated in this round
