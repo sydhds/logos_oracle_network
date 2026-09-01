@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -8,8 +9,14 @@ use dashmap::DashMap;
 use rand::Rng;
 use url::Url;
 use prost::Message;
-use secp256k1::{Keypair, Secp256k1, XOnlyPublicKey};
-use secp256k1::hashes::{sha256, Hash, sha256d};
+use secp256k1::{
+    Keypair,
+    Secp256k1,
+    // XOnlyPublicKey
+};
+use secp256k1::hashes::{
+    // sha256,
+    Hash, sha256d};
 use tracing::{info, debug, error};
 // third-party - logos
 use logos_blockchain_zone_sdk::{
@@ -28,7 +35,7 @@ use lb_core::mantle::ops::channel::{
 use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key};
 // internal
 use crate::zone_state::InMemoryZoneState;
-use common::{ParsedUpdate, PartialPriceObservation};
+use common::PartialPriceObservation;
 use crate::lon::PriceObservation;
 
 pub struct Sequencer {
@@ -38,7 +45,7 @@ pub struct Sequencer {
     state: InMemoryZoneState,
     // pub queue_file: String,
     pub checkpoint_path: PathBuf,
-    price_map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
+    price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
     price_feed: String,
     // oracle pubk
     oracle_pubkey: Keypair,
@@ -55,7 +62,7 @@ impl Sequencer {
         // queue_file: &str,
         checkpoint_path: PathBuf,
         // channel_path: &str,
-        price_map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
+        price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
         price_feed: String,
     ) -> anyhow::Result<Self> {
 
@@ -101,7 +108,7 @@ impl Sequencer {
 
             // Wait for sequencer to be ready
             info!("Waiting for sequencer to be ready...");
-            let mut ready_rx = sequencer_client.subscribe_ready();
+            let ready_rx = sequencer_client.subscribe_ready();
             /*
             info!("Waiting for sequencer to be ready 2...");
             let _unused = tokio::time::timeout(
@@ -127,7 +134,7 @@ impl Sequencer {
                 };
 
                 // info!("price map: {:?}", price_map);
-                let Some(price_latest) = prices.last() else {
+                let Some(price_latest) = prices.back() else {
                     // info!("No prices...");
                     // interval.tick().await;
                     continue
@@ -168,7 +175,7 @@ impl Sequencer {
                     let msg_hash = sha256d::Hash::hash(to_hash.as_slice());
                     let msg = secp256k1::Message::from_digest(msg_hash.to_byte_array());
                     // Generate the BIP-340 Schnorr Signature
-                    let schnorr_sig = secp256k1::Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
+                    let schnorr_sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
                     obs.signature = schnorr_sig.serialize().to_vec();
                     obs
                 };

@@ -29,6 +29,7 @@ tokio = { default-features = false, features = [
 ], version = "1" }
 lb-http-api-common = { workspace = true }
 rust_decimal = "1.42.1"
+pyth-sdk = "0.8" # price decimal conversion
 
 [dev-dependencies]
 wiremock = "0.6"

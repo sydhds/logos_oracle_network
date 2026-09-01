@@ -7,7 +7,7 @@ use common::{PartialPriceObservation, RedstonePriceEvent};
 
 pub async fn fetch_price(
     url: Url,
-    symbol: &str,
+    _symbol: &str,
     symbol_normalized: &str,
     // redstone_provider: Option<&str>,
     price_update_queue: UnboundedSender<PartialPriceObservation>) -> anyhow::Result<()>

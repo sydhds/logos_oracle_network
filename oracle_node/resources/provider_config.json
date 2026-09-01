@@ -1,6 +1,6 @@
 {
   "endpoints": {
-    "pyth": "https://hermes.pyth.network/v2/updates/price/stream",
+    "pyth": "https://pyth.dourolabs.app/hermes/v2/updates/price/stream",
     "redstone": "https://api.redstone.finance/prices",
     "binance": "wss://stream.binance.com:9443/ws"
   },

@@ -2,18 +2,25 @@ use anyhow::Context;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_eventsource::{Event, EventSource};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::time::{sleep, Duration};
-// use serde::{Serialize, Deserialize};
-use tracing::{info, debug, error};
-
-use common::HermesPriceEvent;
+use tokio::{
+    sync::mpsc::UnboundedSender,
+    time::{sleep, Duration}
+};
+use tracing::{
+    info,
+    error,
+    // debug
+};
+use url::Url;
+// internal
+use common::{HermesPriceEvent, PartialPriceObservation};
 
 pub async fn fetch_price(
-    hermes_price_url: &str,
-    hermes_bearer: &str,
+    url: Url,
+    bearer: &str,
     price_id: &str,
-    price_update_queue: UnboundedSender<HermesPriceEvent>) -> anyhow::Result<()>
+    price_id_normalized: &str,
+    price_update_queue: UnboundedSender<PartialPriceObservation>) -> anyhow::Result<()>
 {
     /*
     let eth_usd_id = "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace";
@@ -23,18 +30,18 @@ pub async fn fetch_price(
     );
     */
 
-    let url = format!("{}?ids[]={}", hermes_price_url, price_id);
+    // let url = format!("{}?ids[]={}", hermes_price_url, price_id);
 
     // Reuse the same HTTP client across reconnections
     let client = Client::new();
     let mut retry_delay = Duration::from_secs(1);
 
     loop {
-        info!("Connecting to Pyth Hermes SSE stream...");
+        info!("Connecting to Pyth Hermes SSE stream ({}) for price feed: {} ({})...", url, price_id, price_id_normalized);
 
         let mut event_source = EventSource::new(client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", hermes_bearer))
+            .get(url.as_str())
+            .header("Authorization", format!("Bearer {}", bearer))
         ).context("While creating Pyth Hermes SSE stream conn")?;
 
         while let Some(event) = event_source.next().await {
@@ -45,12 +52,21 @@ pub async fn fetch_price(
                     retry_delay = Duration::from_secs(1);
                 }
                 Ok(Event::Message(message)) => {
-                    // println!("New Price Update: {}", message.data);
+                    // debug!("New Price Update: {}", message.data);
 
                     match serde_json::from_str::<HermesPriceEvent>(&message.data) {
                         Ok(update_event) => {
-                            if let Err(e) = price_update_queue.send(update_event) {
-                                error!("Error while sending price update event: {}", e);
+
+                            match PartialPriceObservation::try_from(
+                                (price_id_normalized.to_string(), update_event)) {
+                                Ok(price_obs) => {
+                                    if let Err(e) = price_update_queue.send(price_obs) {
+                                        error!("Error while sending price update event: {}", e);
+                                    }
+                                },
+                                Err(e) => {
+                                    error!("Error while converting event to price update event: {}", e);
+                                }
                             }
                         },
                         Err(err) => {

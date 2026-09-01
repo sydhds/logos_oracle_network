@@ -2,18 +2,6 @@ use spel_framework::prelude::*;
 use sha2::{Sha256, Digest};
 
 const ORACLE_REGISER_LITERAL: &str = "oracle_register__";
-/*
-const CREATE_KEY: [u8; 32] = [
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 1,
-];
-*/
 
 /// Raw seed bytes for the vault PDA, for inclusion in a `Propose` instruction's `pda_seeds`.
 /// Vault seed: [literal("oracle_register__"), arg("create_key")] — two-seed multi-hash.

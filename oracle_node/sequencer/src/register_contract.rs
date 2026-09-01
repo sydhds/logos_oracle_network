@@ -1,21 +1,21 @@
-use std::process;
-// use std::collections::HashMap;
-// use std::path::Path;
-use oracle_register_client::{OracleRegisterClient, RegisterAccounts as OracleRegisterAccounts, RegisterAccounts, RegisterState as OracleRegisterState};
 use anyhow::{anyhow, Context};
 use serde::{Serialize, Deserialize};
-use spel::tx::execute_instruction;
-// use spel_framework::idl::SpelIdl;
-use spel_framework::prelude::{seed_from_str, AccountId, ProgramId, compute_pda_multi, ToSeed};
-use tracing::{info, debug};
-use wallet::WalletCore;
 use sha2::{Sha256, Digest};
+use tracing::{info, debug};
+use spel_framework::prelude::{seed_from_str, AccountId, ProgramId, compute_pda_multi, ToSeed};
+use wallet::WalletCore;
+// internal
+use oracle_register_client::{
+    OracleRegisterClient,
+    RegisterAccounts,
+    RegisterState as OracleRegisterState
+};
 
 pub async fn sequencer_register(
     rc_info: RegisterContractInfo,
 ) -> anyhow::Result<()> {
     
-    let wallet_core = WalletCore::from_env()?;
+    let wallet_core = WalletCore::from_env().context("Getting wallet accounts from env")?;
     let oracle_register_program_id = ProgramId::from(rc_info.oracle_register_program_id);
     let client = OracleRegisterClient::new(&wallet_core, oracle_register_program_id);
 
@@ -81,39 +81,6 @@ pub async fn sequencer_register(
     Ok(())
 }
 
-
-/*
-async fn idl_parse(idl_path: &Path) -> anyhow::Result<SpelIdl> {
-    let idl_content = std::fs::read_to_string(idl_path)
-        .context(format!("Error reading IDL file: {}", idl_path.display()))?;
-    let idl: SpelIdl = serde_json::from_str(&idl_content)?;
-    Ok(idl)
-}
-
-async fn sequencer_register(idl: &SpelIdl, program_id_hex: &str) -> anyhow::Result<()> {
-    info!("Stating sequencer register...");
-    let ix_name = "register";
-    let ix = idl
-        .instructions
-        .iter()
-        .find(|ix| ix.name == ix_name)
-        .ok_or(anyhow!("Unable to find instruction {}", ix_name))?;
-    let args = HashMap::new();
-    let program_path = None;
-    let dry_run = None;
-    let extra_bins = HashMap::new();
-
-    // Note:
-    // * execute_instruction will call process::exit on failure - TODO: rewrite function
-    //  * on a rewrite - separate the tx submission from tx waiting
-    execute_instruction(idl, ix, &args, program_path, Some(program_id_hex), dry_run, &extra_bins).await;
-
-    info!("Register complete");
-
-    Ok(())
-}
-*/
-
 const ORACLE_REGISER_LITERAL: &str = "oracle_register__";
 
 /// Raw seed bytes for the vault PDA, for inclusion in a `Register` instruction's `pda_seeds`.
@@ -149,20 +116,19 @@ pub struct RegisterContractInfo {
     #[serde(with = "bs58_32_bytes")]
     pub oracle_node_funding_account: [u8; 32],
 
-    #[serde(with = "bs58_32_bytes")]
-    pub oracle_register_to: [u8; 32],
+    // #[serde(with = "bs58_32_bytes")]
+    // pub oracle_register_to: [u8; 32],
 
     #[serde(with = "bs58_32_bytes")]
     pub token_definition_account: [u8; 32],
 
-    #[serde(with = "hex_32_bytes")]
-    pub oracle_register_to_pda_seed: [u8; 32],
+    // #[serde(with = "hex_32_bytes")]
+    // pub oracle_register_to_pda_seed: [u8; 32],
 }
 
 pub mod hex_u32_8 {
 
     use serde::{Deserialize, Deserializer, Serializer};
-    use std::convert::TryInto;
 
     // Converts [u32; 8] -> 32 bytes -> hex string
     pub fn serialize<S>(array: &[u32; 8], serializer: S) -> Result<S::Ok, S::Error>
@@ -203,7 +169,6 @@ pub mod hex_u32_8 {
 
 pub mod hex_32_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
-    use std::convert::TryInto;
 
     // Converts the [u8; 32] array into a hex string for JSON
     pub fn serialize<S>(bytes: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error>
@@ -239,7 +204,6 @@ pub mod hex_32_bytes {
 
 pub mod bs58_32_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
-    use std::convert::TryInto;
 
     pub fn serialize<S>(bytes: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error>
     where

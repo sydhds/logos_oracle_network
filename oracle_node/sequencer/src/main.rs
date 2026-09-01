@@ -88,7 +88,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let price_monitor = PriceMonitor::new(price_map.clone());
 
     // Setup time info poll
-    let (time_info_tx, time_info_rx) = tokio::sync::watch::channel(None);
+    let (time_info_tx, _time_info_rx) = tokio::sync::watch::channel(None);
     let poll_interval = Duration::from_millis(20);
 
     // Register (or check it is already registered) to oracle_register contract
@@ -108,7 +108,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         "binance" => {
             // Binance uses: "btcusdt"
             let url_str = format!("{}/{}@ticker", price_feed_url, price_feed_provider.to_lowercase());
-            let url = Url::parse(&url_str).expect("Failed to parse Binance WS URL");
+            let url = Url::parse(&url_str).context("Failed to parse Binance WS URL")?;
             set.spawn(async move {
                 binance_fetch::fetch_price(
                     url,
@@ -122,7 +122,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
             // Can be: redstone, redstone-rapid, redstone-stocks, redstone-custom-urls
             let redstone_provider = "redstone";
             let url_str = format!("https://api.redstone.finance/prices?symbol={}&provider={}", price_feed_provider, redstone_provider);
-            let url = Url::parse(&url_str).expect("Failed to parse Binance WS URL");
+            let url = Url::parse(&url_str).context("Failed to parse Redstone https URL")?;
             set.spawn(async move {
                 redstone_fetch::fetch_price(
                     url,
@@ -133,7 +133,22 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
             });
         },
         "pyth" => {
-            todo!()
+            
+            if args.pyth_bearer.is_none() {
+                return Err(anyhow!("Pyth bearer token not specified"));
+            }
+            
+            let url_str = format!("{}?ids[]={}", price_feed_url, price_feed_provider);
+            let url = Url::parse(&url_str).context("Failed to parse Python SSE URL")?;
+            set.spawn(async move {
+                pyth_fetch::fetch_price(
+                    url,
+                    args.pyth_bearer.unwrap().as_str(),
+                    price_feed_provider.as_str(),
+                    price_feed_normalized,
+                    tx
+                ).await
+            });
         },
         _ => {
             unimplemented!()

@@ -1,17 +1,20 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use dashmap::DashMap;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 // external deps
 use common::PartialPriceObservation;
 
+const MAX_VEC_SIZE_PER_FEED_ID: usize = 1024;
+
 pub struct PriceMonitor {
-    map: Arc<DashMap<String, Vec<PartialPriceObservation>>>,
+    map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
 }
 
 impl PriceMonitor {
 
-    pub fn new(map: Arc<DashMap<String, Vec<PartialPriceObservation>>>) -> Self {
+    pub fn new(map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>) -> Self {
         Self { map }
     }
 
@@ -29,8 +32,16 @@ impl PriceMonitor {
             self
                 .map
                 .entry(feed_id_key)
-                .and_modify(|v| v.push(price_update.clone()))
-                .or_insert(vec![price_update]);
+                .and_modify(|v| {
+                    if v.len() > MAX_VEC_SIZE_PER_FEED_ID {
+                        warn!("Price feed {} entries too large...", price_update.feed_id);
+                        // Remove oldest entry
+                        v.pop_front();
+                    }
+                    v.push_back(price_update.clone());
+                    // warn!("Price feed {}, entries count: {}", price_update.feed_id, v.len());
+                })
+                .or_insert(VecDeque::from([price_update]));
         }
 
         Ok(())

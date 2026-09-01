@@ -1,7 +1,9 @@
-use lb_core::mantle::ops::channel::MsgId;
-use logos_blockchain_zone_sdk::sequencer::InscriptionInfo;
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use lb_core::mantle::ops::channel::MsgId;
+use logos_blockchain_zone_sdk::sequencer::InscriptionInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppMessage {
