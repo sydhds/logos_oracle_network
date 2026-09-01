@@ -12,10 +12,8 @@ use prost::Message;
 use secp256k1::{
     Keypair,
     Secp256k1,
-    // XOnlyPublicKey
 };
 use secp256k1::hashes::{
-    // sha256,
     Hash, sha256d};
 use tracing::{info, debug, error};
 // third-party - logos
@@ -41,9 +39,7 @@ use crate::lon::PriceObservation;
 pub struct Sequencer {
     sequencer: ZoneSequencer<NodeHttpClient>,
     client: SequencerClient,
-    // handle: SequencerHandle<NodeHttpClient>,
     state: InMemoryZoneState,
-    // pub queue_file: String,
     pub checkpoint_path: PathBuf,
     price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
     price_feed: String,
