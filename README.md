@@ -1,5 +1,4 @@
-
-# logos_oracle_network
+# Logos Oracle Network (LON)
 
 ## LEZ dev setup
 
