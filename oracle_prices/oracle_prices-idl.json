@@ -1,69 +1,15 @@
 {
-  "accounts": [
-    {
-      "name": "OraclePricesState",
-      "type": {
-        "fields": [
-          {
-            "name": "feeds",
-            "type": {
-              "vec": {
-                "array": [
-                  "u8",
-                  32
-                ]
-              }
-            }
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "PriceState",
-      "type": {
-        "fields": [
-          {
-            "name": "feed_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "price",
-            "type": "u64"
-          },
-          {
-            "name": "decimals",
-            "type": "u32"
-          },
-          {
-            "name": "valid_count",
-            "type": "u32"
-          },
-          {
-            "name": "round",
-            "type": "u64"
-          },
-          {
-            "name": "confidence",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    }
-  ],
-  "errors": [],
+  "version": "0.1.0",
+  "name": "oracle_prices",
   "instructions": [
     {
+      "name": "initialize",
       "accounts": [
         {
-          "init": true,
           "name": "oracle_prices_account",
+          "writable": true,
+          "signer": false,
+          "init": true,
           "pda": {
             "seeds": [
               {
@@ -71,19 +17,19 @@
                 "value": "oracle_prices"
               }
             ]
-          },
-          "signer": false,
-          "writable": true
+          }
         }
       ],
-      "args": [],
-      "name": "initialize"
+      "args": []
     },
     {
+      "name": "initialize_feed",
       "accounts": [
         {
-          "init": false,
           "name": "oracle_prices_account",
+          "writable": true,
+          "signer": false,
+          "init": false,
           "pda": {
             "seeds": [
               {
@@ -91,13 +37,13 @@
                 "value": "oracle_prices"
               }
             ]
-          },
-          "signer": false,
-          "writable": true
+          }
         },
         {
-          "init": true,
           "name": "feed_price",
+          "writable": true,
+          "signer": false,
+          "init": true,
           "pda": {
             "seeds": [
               {
@@ -109,9 +55,7 @@
                 "path": "feed_id"
               }
             ]
-          },
-          "signer": false,
-          "writable": true
+          }
         }
       ],
       "args": [
@@ -124,14 +68,16 @@
             ]
           }
         }
-      ],
-      "name": "initialize_feed"
+      ]
     },
     {
+      "name": "publish_price",
       "accounts": [
         {
-          "init": false,
           "name": "feed_price",
+          "writable": true,
+          "signer": false,
+          "init": false,
           "pda": {
             "seeds": [
               {
@@ -143,9 +89,7 @@
                 "path": "feed_id"
               }
             ]
-          },
-          "signer": false,
-          "writable": true
+          }
         }
       ],
       "args": [
@@ -178,11 +122,65 @@
           "name": "confidence",
           "type": "u64"
         }
-      ],
-      "name": "publish_price"
+      ]
     }
   ],
-  "name": "my_counter",
-  "types": [],
-  "version": "0.1.0"
+  "accounts": [
+    {
+      "name": "OraclePricesState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "feeds",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "decimals",
+            "type": "u32"
+          },
+          {
+            "name": "valid_count",
+            "type": "u32"
+          },
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "confidence",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
 }
