@@ -12,6 +12,7 @@ pub mod lon {
 }
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use anyhow::{anyhow, Context};
 // use spel_framework::prelude::AccountId;
 use clap::Parser;
 use dashmap::DashMap;
+use rand::Rng;
 use tokio::task::JoinSet;
 use serde::Deserialize;
 use tracing::{
@@ -37,6 +39,8 @@ use crate::args::SequencerArgs;
 use crate::monitor::PriceMonitor;
 use crate::register_contract::sequencer_register;
 use common::{time_info_poll, RegisterContractInfo};
+use lb_core::mantle::ops::channel::ChannelId;
+use lb_key_management_system_service::keys::{Ed25519Key, ED25519_SECRET_KEY_SIZE};
 
 #[tokio::main]
 async fn main() {
@@ -53,11 +57,15 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     info!("Starting oracle node sequencer...");
     debug!("args: {:?}", &args);
 
+    info!("Try to read signing key path: {}...", args.key_path.display());
+    let oracle_keypair = load_or_create_signing_key(args.key_path.as_path())?;
+    let oracle_pubk = oracle_keypair.public_key();
+
     let cfg = parse_provider_config(args.provider_config.as_path())
         .context(format!("while parsing provider config: {}", args.provider_config.display()))?;
     
-    // let provider = "binance";
-    let provider = "redstone";
+    let provider = "binance";
+    // let provider = "redstone";
     let price_feed_normalized = "ETH/USD";
     let price_feed_url = cfg.endpoints.get(provider).ok_or(anyhow!("Cannot get an url for provider"))?;
     let price_feed_provider = cfg.feeds.get(provider)
@@ -76,7 +84,10 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         args.node_auth_password,
         args.data_folder.join(&args.checkpoint_path),
         price_map.clone(),
-        price_feed_normalized.to_string()
+        price_feed_normalized.to_string(),
+        oracle_keypair,
+        ChannelId::from(oracle_pubk.to_bytes()),
+
     )
         .context("Failed to initialize sequencer")?;
 
@@ -97,7 +108,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
         let reader = std::io::BufReader::new(file);
         let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
         debug!("oracle register cfg: {:?}", cfg);
-        sequencer_register(cfg).await?;
+        sequencer_register(cfg, oracle_pubk.as_bytes()).await?;
     }
 
     let mut set = JoinSet::new();
@@ -240,4 +251,25 @@ fn parse_provider_config(json_cfg: &Path) -> anyhow::Result<PriceProviderConfig>
     Ok(cfg)
 }
 
+fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
+    if path.exists() {
+        let key_bytes = fs::read(path).context("failed to read key file")?;
+        assert_eq!(key_bytes.len(), ED25519_SECRET_KEY_SIZE, "invalid key file: expected {} bytes, got {}", ED25519_SECRET_KEY_SIZE, key_bytes.len());
+        let key_array: [u8; ED25519_SECRET_KEY_SIZE] = key_bytes
+            .as_slice()
+            .try_into()
+            .context("Cannot convert bytes to [u8; 32]")?;
+        Ok(Ed25519Key::from_bytes(&key_array))
+    } else {
+        let mut key_bytes = [0u8; ED25519_SECRET_KEY_SIZE];
+        let mut rng = rand::thread_rng();
+        rng.fill(&mut key_bytes);
+        info!("Start writing key file to: {}", path.display());
+        fs::write(path, key_bytes)
+            .context(format!("Error while writing key file to {}", path.display()))?
+        // .expect("failed to write key file")
+        ;
+        Ok(Ed25519Key::from_bytes(&key_bytes))
+    }
+}
 

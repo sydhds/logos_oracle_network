@@ -16,6 +16,7 @@ use secp256k1::{
 use secp256k1::hashes::{
     Hash, sha256d};
 use tracing::{info, debug, error};
+use bytes::Bytes;
 // third-party - logos
 use logos_blockchain_zone_sdk::{
     adapter::NodeHttpClient,
@@ -34,6 +35,8 @@ use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key
 // internal
 use crate::zone_state::InMemoryZoneState;
 use common::PartialPriceObservation;
+use lb_core::codec::SerializeOp;
+use lb_key_management_system_service::keys::secured_key::SecuredKey;
 use crate::lon::PriceObservation;
 
 pub struct Sequencer {
@@ -44,7 +47,8 @@ pub struct Sequencer {
     price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
     price_feed: String,
     // oracle pubk
-    oracle_pubkey: Keypair,
+    // oracle_pubkey: Keypair,
+    oracle_channel_keypair: Ed25519Key
 }
 
 impl Sequencer {
@@ -60,20 +64,28 @@ impl Sequencer {
         // channel_path: &str,
         price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
         price_feed: String,
+        oracle_signing_key: Ed25519Key,
+        oracle_channel_id: ChannelId,
     ) -> anyhow::Result<Self> {
 
         let checkpoint = None;
 
-        let oracle_pubkey = generate_oracle_credentials(oracle_key_path.as_path())?;
+        // let oracle_pubkey = generate_oracle_id(oracle_key_path.as_path())?;
 
-        let signing_key = load_or_create_signing_key(signing_key_path.as_path())?;
-        let channel_id = ChannelId::from(signing_key.public_key().to_bytes());
+        // let signing_key = load_or_create_signing_key(signing_key_path.as_path())?;
+        // let channel_id = ChannelId::from(signing_key.public_key().to_bytes());
+        let signing_key = oracle_signing_key;
+        let channel_id = oracle_channel_id;
+
+        info!("Sequence channel id: {}", channel_id);
+        info!("Sequence channel id: {:?}", channel_id.as_ref());
+
         let node_url = Url::parse(node_endpoint)?; // .map_err(|e| anyhow!(e))?;
         let basic_auth = node_auth_username
             .map(|username| BasicAuthCredentials::new(username, node_auth_password));
 
         let node = NodeHttpClient::new(CommonHttpClient::new(basic_auth), node_url);
-        let sequencer = ZoneSequencer::init(channel_id, signing_key, node, checkpoint);
+        let sequencer = ZoneSequencer::init(channel_id, signing_key.clone(), node, checkpoint);
         let client = sequencer.client();
 
         Ok(Self {
@@ -84,7 +96,8 @@ impl Sequencer {
             checkpoint_path,
             price_map,
             price_feed,
-            oracle_pubkey
+            // oracle_pubkey
+            oracle_channel_keypair: signing_key
         })
     }
 
@@ -96,8 +109,11 @@ impl Sequencer {
 
         let price_map = self.price_map.clone();
         let price_feed = self.price_feed.clone();
-        let keypair = self.oracle_pubkey.clone();
-        let pubk = keypair.public_key();
+        // let keypair = self.oracle_pubkey.clone();
+        // let pubk = keypair.public_key();
+
+        let oracle_channel_keypair = self.oracle_channel_keypair.clone();
+        let oracle_channel_pubkey = oracle_channel_keypair.public_key();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_mins(1));
@@ -119,6 +135,7 @@ impl Sequencer {
             */
 
             info!("Sequencer ready, loop...");
+            let mut round: i64 = 1000;
 
             loop {
 
@@ -150,13 +167,14 @@ impl Sequencer {
                 */
 
                 let obs = {
+                    round = round.saturating_add(1);
                     let mut obs = PriceObservation {
                         feed_id: price_latest.feed_id.clone(),
                         price: price_latest.price,
                         decimals: price_latest.decimals,
-                        round: 1045, // TODO: need Logos RPC doc
+                        round, // TODO: need Logos RPC doc
                         timestamp: price_latest.timestamp,
-                        oracle_id: pubk.serialize().to_vec(),
+                        oracle_id: oracle_channel_pubkey.to_bytes().to_vec(),
                         signature: vec![],
                         membership_proof: vec![], // TODO: need LEZ register contract
                     };
@@ -171,8 +189,13 @@ impl Sequencer {
                     let msg_hash = sha256d::Hash::hash(to_hash.as_slice());
                     let msg = secp256k1::Message::from_digest(msg_hash.to_byte_array());
                     // Generate the BIP-340 Schnorr Signature
-                    let schnorr_sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
-                    obs.signature = schnorr_sig.serialize().to_vec();
+                    // let schnorr_sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
+                    // obs.signature = schnorr_sig.serialize().to_vec();
+                    // TODO / FIXME: spec requires BIP-340 Schnorr Signature
+                    // TODO: no unwrap
+                    let sig = oracle_channel_keypair.sign(&Bytes::from(to_hash)).unwrap();
+                    obs.signature = sig.to_bytes().to_vec();
+                    debug!("price observation: {:?}", obs);
                     obs
                 };
 
@@ -210,32 +233,7 @@ impl Sequencer {
 
 }
 
-fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
-    if path.exists() {
-        let key_bytes = fs::read(path).expect("failed to read key file");
-        assert!(
-            key_bytes.len() == ED25519_SECRET_KEY_SIZE,
-            "invalid key file: expected {} bytes, got {}",
-            ED25519_SECRET_KEY_SIZE,
-            key_bytes.len()
-        );
-        let key_array: [u8; ED25519_SECRET_KEY_SIZE] =
-            key_bytes.try_into().expect("length already checked");
-        Ok(Ed25519Key::from_bytes(&key_array))
-    } else {
-        let mut key_bytes = [0u8; ED25519_SECRET_KEY_SIZE];
-        let mut rng = rand::thread_rng();
-        rng.fill(&mut key_bytes);
-        println!("Start writing key file to: {}", path.display());
-        fs::write(path, key_bytes)
-            .context(format!("Error while writing key file to {}", path.display()))?
-            // .expect("failed to write key file")
-            ;
-        Ok(Ed25519Key::from_bytes(&key_bytes))
-    }
-}
-
-fn generate_oracle_credentials(_path: &Path) -> anyhow::Result<Keypair> {
+fn generate_oracle_id(_path: &Path) -> anyhow::Result<Keypair> {
     let secp = Secp256k1::new();
     let mut rng = rand::thread_rng();
     let keypair = Keypair::new(&secp, &mut rng);

@@ -10,8 +10,8 @@ pub struct PricesContractInfo {
 pub struct RegisterContractInfo {
     #[serde(with = "hex_u32_8")]
     pub oracle_register_program_id: [u32; 8],
-    #[serde(with = "hex_32_bytes")]
-    pub oracle_node_id: [u8; 32],
+    // #[serde(with = "hex_32_bytes")]
+    // pub oracle_node_id: [u8; 32],
     #[serde(with = "bs58_32_bytes")]
     pub oracle_register_account: [u8; 32],
     #[serde(with = "bs58_32_bytes")]

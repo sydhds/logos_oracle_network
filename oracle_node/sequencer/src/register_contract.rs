@@ -13,6 +13,7 @@ use common::RegisterContractInfo;
 
 pub async fn sequencer_register(
     rc_info: RegisterContractInfo,
+    node_id: &[u8; 32]
 ) -> anyhow::Result<()> {
     
     let wallet_core = WalletCore::from_env().context("Getting wallet accounts from env")?;
@@ -26,12 +27,12 @@ pub async fn sequencer_register(
 
     debug!("register store fetched...");
 
-    if !register_store.registered.contains(&rc_info.oracle_node_id) {
-        info!("Oracle node (ID {:?}) not registered", &rc_info.oracle_node_id);
+    if !register_store.registered.contains(node_id) {
+        info!("Oracle node (ID {:?}) not registered", node_id);
         info!("Registering...");
 
-        let to_account = compute_vault_pda(&oracle_register_program_id, &rc_info.oracle_node_id);
-        let to_account_pda_seed = vault_pda_seed_bytes(&rc_info.oracle_node_id);
+        let to_account = compute_vault_pda(&oracle_register_program_id, node_id);
+        let to_account_pda_seed = vault_pda_seed_bytes(node_id);
 
         let accounts = RegisterAccounts {
             // Oracle register contract account
@@ -47,7 +48,7 @@ pub async fn sequencer_register(
 
         let response = client.register(
             accounts,
-            rc_info.oracle_node_id,
+            *node_id,
             // rc_info.oracle_register_to_pda_seed
             to_account_pda_seed
         )

@@ -33,6 +33,7 @@ tracing = { workspace = true }
 tracing-subscriber = { features = ["env-filter"], version = "0.3.23" }
 sha2 = { version = "0.11.0" }
 hex = { workspace = true }
+bytes = { workspace = true }
 # lb deps
 lb-common-http-client = { workspace = true }
 lb-core = { workspace = true }

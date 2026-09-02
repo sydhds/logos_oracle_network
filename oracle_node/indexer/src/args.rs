@@ -12,6 +12,14 @@ pub struct IndexerArgs {
     )]
     pub node_url: String,
 
+    /// Logos blockchain node REST API endpoint
+    #[arg(
+        long,
+        default_value = "http://localhost:18080",
+        env = "SEQUENCER_REST_ENDPOINT"
+    )]
+    pub node_rest_url: String,
+
     /// Path to the channel ID file
     #[arg(long, default_value = "./data/channel.txt")]
     pub(crate) channel_path: String,

@@ -16,12 +16,12 @@ pub async fn fetch_registered(rc_info: &RegisterContractInfo) -> anyhow::Result<
     let oracle_register_program_id = ProgramId::from(rc_info.oracle_register_program_id);
     let client = OracleRegisterClient::new(&wallet_core, oracle_register_program_id);
 
-    debug!("Fetching oracle register state...");
-    debug!("client program id: {:?}", client.program_id);
+    // debug!("Fetching oracle register state...");
+    // debug!("client program id: {:?}", client.program_id);
     let register_store = client.fetch_register::<OracleRegisterState>().await
         .map_err(|err| anyhow!("{}", err))?;
 
-    debug!("register store fetched...");
+    // debug!("register store fetched...");
 
     Ok(register_store.registered.to_vec())
 }

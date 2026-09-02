@@ -8,8 +8,9 @@ use tokio::{
 };
 use lb_http_api_common::paths;
 use tracing::{
-    // debug,
-    error, info
+    debug,
+    error,
+    info
 };
 
 /// Logos rest API
@@ -63,9 +64,12 @@ pub async fn time_info_poll(
             }
         }
 
+        // info!("[time_info_poll] waiting for {} ms...", poll_interval.as_millis());
         sleep(poll_interval).await;
+        // info!("[time_info_poll] DONE waiting for {} ms.", poll_interval.as_millis());
     }
-    
+
+    info!("Time poller exiting...");
     Ok(())
 }
 
