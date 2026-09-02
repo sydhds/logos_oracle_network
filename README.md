@@ -1,5 +1,4 @@
-
-# logos_oracle_network
+# Logos Oracle Network (LON)
 
 ## LEZ dev setup
 
@@ -8,7 +7,7 @@
 * to install: sudo apt install unzip python3.12-dev pkgconf libpcsclite-dev
 * From tutorial.md in https://github.com/logos-co/spel/pull/138
   * RISC0 toolchain: https://dev.risczero.com/api/zkvm/install
-  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
+  * Compile spel: `git clone https://github.com/logos-co/spel.git` && `cd spel` && `git checkout v0.6.0`  && `cargo build -p spel-framework -p spel-framework-core -p spel-framework-macros -p spel-client-gen -p spel`
   * Compile logos execution zone: `git clone https://github.com/logos-blockchain/logos-execution-zone.git && cd logos-execution-zone && git checkout v0.2.0`
     * Find the logos execution zone version in spel/spel-framework/Cargo.toml
     * Compile: `cargo build --release --features standalone -p sequencer_service` && `cargo build --release -p wallet`
@@ -45,7 +44,9 @@ Note:
   * `spel pda counter`
   * `spel inspect "G1gkRm62LdJ2XWpj5NBHeHgdNgjrzqQuPnW4CL8GqNjm" --type CounterState`
 
-## Build oracle register contract
+## Oracle register contract
+
+### Build
 
 * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_register` then `make build`
 * Faster dev build (still requires the CARGO_TARGET_DIR export):
@@ -53,15 +54,24 @@ Note:
 * Generate idl
   * `spel generate-idl methods/guest/src/bin/oracle_register.rs > oracle_register-idl.json`
 
-## Deploy it (WIP)
+### Deploy
 
 * Copy file
   * `cp -v /home/ubuntu/local_target/oracle_register/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin` 
   * dev build: `cp -v /home/ubuntu/local_target/oracle_register/riscv-guest/oracle_register-methods/oracle_register-guest/riscv32im-risc0-zkvm-elf/release/oracle_register.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin`
-* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
-* `spel register --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3`
+* `make deploy`
+* `spel initialize --owner 5EYkqoY3fXNGqUABDMaCFurivdofeaXUofpKnJ6NrQE3 --token-program-id 0,0,...`
+  * token program id can computed using: `lon_helpers` (FIXME / TODO: commit or find a better place)
+    * `cd lon_helpers` && `cargo run -- e5884cfe882bd11e490a9a51e9eef060581e8aca2597c5acf329aa655fb140c6` (hex string displayed when token program has been deployed)
+* Register an oracle node:
+  * Generate `pda_seed` + `to` account: `cd oracle_helper_1 && cargo run`
+  * `spel register --token-def-account 3R413ZmQ7yETsNCEVHmVD4ju9z2GP9HLTEMQb3Ps85rx --oracle-key 0000000000000000000000000000000000000000000000000000000000000001 --from EJg2dB2YWZTQjbBvz3VEhEM2mgvXNRrZ9CkXM6nwXugb --to Egmcm7LRjeEZYPNGNDKd1m81jSjkbpwvZ75Lh6kAdbDn --pda-seed d546e7902066da243a0efa4e4d716b7f78356fa6632adb563fb74ce0a0366d73`
 
-## Use oracle_register_client
+### Generate client code
+
+* `spel-client-gen --idl oracle_register-idl.json --out-dir ../oracle_register_client/src`
+
+### oracle_register_client
 
 * `cargo run -- /home/ubuntu/repos/logos_oracle_network/oracle_register/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_register.bin /home/ubuntu/lez-programs/programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
 
@@ -71,13 +81,11 @@ Note:
 
 * `git clone https://github.com/logos-blockchain/lez-programs.git`
   * build: `cargo risczero build --manifest-path ./programs/token/methods/guest/Cargo.toml`
-    * copy .bin file: `cp -v /home/ubuntu/local_target/oracle_register_client/riscv32im-risc0-zkvm-elf/docker/token.bin programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
-      * Note: this is bc in this example the CARGO_TARGET_DIR was already set so you need to adapt here
    * deploy: `wallet deploy-program programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin`
    * generate idl: `spel generate-idl programs/token/methods/guest/src/bin/token.rs > artifacts/token-idl.json`
    * See avail cmd: `spel --idl artifacts/token-idl.json --help`
-   * create a token: `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- new-fungible-definition --name "LON" --total-supply 21000 --definition-target-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj --holding-target-account 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --mint-authority daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj`
-   * mint: `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- mint --amount-to-mint 100 --definition-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj --user-holding-account 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp`
+   * create a token: `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin -- new-fungible-definition --name "LON" --total-supply 21000 --definition-target-account daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj --holding-target-account 9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp --mint-authority none`
+     * Note: create accounts: `wallet account new public --label lon_token_def_account` && `wallet account new public --label lon_token_hold_account`
    * inspect:
      * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "9DYb8L5nVTxYoYx7aKXQ1UU7J9fzY84LFzoAY4dQtghp" --type TokenHolding`
      * `spel --idl artifacts/token-idl.json -p programs/token/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/token.bin inspect "daZ1dGEHxU9UAYCK9QrfSPE6LutYP369A3DC8XnryQj" --type TokenDefinition`
@@ -98,11 +106,11 @@ Note:
   * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
   * `make build`
   * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `make idl`
+  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
 * Build (no docker)
   * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
   * `cp -v ~/local_target/oracle_prices/riscv-guest/oracle_prices-methods/oracle_prices-guest/riscv32im-risc0-zkvm-elf/release/oracle_prices.bin  methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `make idl`
+  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
 * Deploy
   * `make deploy`
 * Init contract
@@ -123,3 +131,31 @@ Note:
 * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices_client`
 * build lib: `cargo build --release`
 * run example: `cargo run -- ../oracle_prices/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin` 
+
+## Logos blockchain setup
+
+* `cd logos-execution-zone`
+  * `docker compose up`
+    * Modification done: 
+      * in `bedrock/node-config.yaml` -> `filter: "!Env {}"`
+      * in `docker-compose.override.yml` -> `RUST_LOG=info,overwatch=warn,overwatch::overwatch=warn`
+  * reset the containers: `docker compose down -v`
+* Setup
+  * `sudo apt install protobuf-compiler`
+* Setup lon repo
+  * `git clone ...`
+  * `git submodule update --init --recursive`
+    * Fix submodule update: `cd oracle_node/logos-blockchain/ && git rm --cached .claude/worktrees/wf_d6259406-6a4-9`
+* Run sequencer
+  * Edit `resources/register_contract_config.json` with some contract info
+    * `oracle_register_program_id`: retrieved when oracle_register contract has been deployed AND initialized
+    * `oracle_register_account`: the PDA where oracle_register has been deployed (find when init: `register → 5NTZHn2Q9AzT3GyVZcDkRCSmHz843Z43cxxLu3GUKjbk (PDA)`
+    * `oracle_node_funding_account`: an account owned by oracle node that have some LON tokens (for staking)
+    * `token_definition_account`: the account that hold the LON token definition 
+  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
+  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p sequencer -- --data-folder /home/ubuntu/local_run/oracle_node/sequencer`
+* Run indexer
+  * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
+  * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p indexer`
+
+

@@ -29,6 +29,7 @@ mod oracle_prices {
     #[allow(unused_imports)]
     use super::*;
 
+    /// Initialize the contract
     #[instruction]
     pub fn initialize(
         #[account(init, pda = literal("oracle_prices"))]
@@ -48,6 +49,7 @@ mod oracle_prices {
         Ok(SpelOutput::execute(vec![oracle_prices_account], vec![]))
     }
 
+    /// Initialize a price feed (to receive AttestedPrice from indexers)
     #[instruction]
     pub fn initialize_feed(
         #[account(mut, pda = [literal("oracle_prices")])]
@@ -79,6 +81,7 @@ mod oracle_prices {
         Ok(SpelOutput::execute(vec![oracle_prices_account, feed_price], vec![]))
     }
 
+    /// Publish an AttestedPrice to a price feed (require an initialized price feed)
     #[instruction]
     pub fn publish_price(
         #[account(mut, pda = [literal("oracle_prices__"), arg("feed_id")])]

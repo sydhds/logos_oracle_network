@@ -1,9 +1,17 @@
+use std::time::Duration;
+// third-party
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use tokio::sync::watch;
-use tokio::time::sleep;
+use tokio::{
+    sync::watch,
+    time::sleep
+};
 use lb_http_api_common::paths;
+use tracing::{
+    debug,
+    error,
+    info
+};
 
 /// Logos rest API
 /// https://deepwiki.com/logos-blockchain/logos-blockchain/7.1-http-api-reference
@@ -23,39 +31,46 @@ pub async fn time_info_poll(
     api_base_url: String,
     poll_interval: Duration,
     tx: watch::Sender<Option<TimeInfo>>,
-) {
+) -> anyhow:: Result<()> {
 
     let client = Client::new();
     let url = format!("{}{}", api_base_url.trim_end_matches('/'), paths::TIME_INFO);
-    println!("url: {}", url);
+    info!("Starting time info poll - url: {}, poll interval: {} ms", url, poll_interval.as_millis());
 
     loop {
         match client.get(&url).send().await {
             Ok(response) if response.status().is_success() => {
                 match response.json::<TimeInfo>().await {
                     Ok(time_info) => {
+                        // TODO: no send if no changes
+                        // debug!("Sending time_info: {:?}", &time_info);
                         if tx.send(Some(time_info)).is_err() {
                             // If this fails, it means all receivers have been dropped,
                             // so we can safely exit the background loop.
-                            eprintln!("Time poller exiting: all receivers dropped.");
+                            error!("Time poller exiting: all receivers dropped.");
                             break;
                         }
                     }
                     Err(e) => {
-                        eprintln!("Failed to parse TimeInfo JSON: {}", e);
+                        error!("Failed to parse TimeInfo JSON: {}", e);
                     }
                 }
             }
             Ok(response) => {
-                eprintln!("Time API returned an error status: {}", response.status());
+                error!("Time API returned an error status: {}", response.status());
             }
             Err(e) => {
-                eprintln!("Failed to reach the Time API: {}", e);
+                error!("Failed to reach the Time API: {}", e);
             }
         }
 
+        // info!("[time_info_poll] waiting for {} ms...", poll_interval.as_millis());
         sleep(poll_interval).await;
+        // info!("[time_info_poll] DONE waiting for {} ms.", poll_interval.as_millis());
     }
+
+    info!("Time poller exiting...");
+    Ok(())
 }
 
 #[cfg(test)]
