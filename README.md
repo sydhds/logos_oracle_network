@@ -107,11 +107,11 @@ Note:
   * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_prices`
   * `make build`
   * `cp -v ~/local_target/oracle_prices/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `make idl`
+  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
 * Build (no docker)
   * `RISC0_USE_DOCKER=0 cargo build -j 8 --release`
   * `cp -v ~/local_target/oracle_prices/riscv-guest/oracle_prices-methods/oracle_prices-guest/riscv32im-risc0-zkvm-elf/release/oracle_prices.bin  methods/guest/target/riscv32im-risc0-zkvm-elf/docker/oracle_prices.bin`
-  * `make idl`
+  * `spel generate-idl methods/guest/src/bin/oracle_prices.rs > oracle_prices-idl.json`
 * Deploy
   * `make deploy`
 * Init contract
