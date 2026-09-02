@@ -14,7 +14,7 @@ use tracing::{debug, error, info};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 // internal
 // use common::time_poller;
-use common::{time_info_poll, RegisterContractInfo};
+use common::{time_info_poll, RegisterContractInfo, PricesContractInfo};
 use indexer::Indexer;
 use crate::args::IndexerArgs;
 use crate::indexer::channel_discover;
@@ -35,13 +35,23 @@ pub async fn run(args: IndexerArgs) -> anyhow::Result<()> {
     info!("Oracle Indexer starting up...");
     info!("  Logos blockchain Node: {}", args.node_url);
 
-    // Register (or check it is already registered) to oracle_register contract
+    // oracle_register contract info
     let oracle_register_cfg = {
         let file = std::fs::File::open(args.register_contract_config.as_path())
             .context(format!("Reading {}", args.register_contract_config.as_path().display()))?;
         let reader = std::io::BufReader::new(file);
         let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
-        debug!("oracle register cfg: {:?}", cfg);
+        debug!("oracle register contract cfg: {:?}", cfg);
+        cfg
+    };
+    
+    // oracle_prices contract info
+    let oracle_prices_cfg = {
+        let file = std::fs::File::open(args.prices_contract_config.as_path())
+            .context(format!("Reading {}", args.prices_contract_config.as_path().display()))?;
+        let reader = std::io::BufReader::new(file);
+        let cfg = serde_json::from_reader::<_, PricesContractInfo>(reader)?;
+        debug!("oracle prices contract cfg: {:?}", cfg);
         cfg
     };
 
@@ -72,6 +82,7 @@ pub async fn run(args: IndexerArgs) -> anyhow::Result<()> {
         args.node_auth_password,
         watch_time_info_rx.clone(),
         watch_channel_ids_rx.clone(),
+        oracle_prices_cfg,
     ) {
         Ok(i) => i,
         Err(e) => {

@@ -26,4 +26,7 @@ pub struct IndexerArgs {
 
     #[arg(long, default_value = "resources/register_contract_config.json")]
     pub register_contract_config: PathBuf,
+
+    #[arg(long, default_value = "resources/prices_contract_config.json")]
+    pub prices_contract_config: PathBuf,
 }

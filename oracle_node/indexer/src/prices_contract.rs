@@ -7,7 +7,7 @@ use common::PricesContractInfo;
 use oracle_prices_client::{OraclePricesClient, PublishPriceAccounts};
 use crate::indexer::lon::AttestedPrice;
 
-pub async fn publish_attested_price(pc_info: PricesContractInfo, attested_price: AttestedPrice) -> anyhow::Result<()> {
+pub async fn publish_attested_price(pc_info: &PricesContractInfo, attested_price: AttestedPrice) -> anyhow::Result<()> {
 
     let wallet_core = WalletCore::from_env()
         .context("Getting wallet accounts from env")?;

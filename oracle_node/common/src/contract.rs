@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PricesContractInfo {
     #[serde(with = "hex_u32_8")]
     pub oracle_prices_program_id: [u32; 8],

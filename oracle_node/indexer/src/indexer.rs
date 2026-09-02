@@ -1,21 +1,25 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::time::Duration;
+// third-party
 use futures::StreamExt as _;
-use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
-use lb_core::mantle::ops::channel::ChannelId;
-use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
-use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 use reqwest::Url;
 use tracing::{error, info, warn};
-use common::{RegisterContractInfo, TimeInfo};
-use crate::indexer::lon::{AttestedPrice, PriceObservation};
 use prost::Message;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use crate::register_contract::fetch_registered;
 use sha2::{Digest, Sha256};
+// third-party - logos
+use lb_common_http_client::{BasicAuthCredentials, CommonHttpClient};
+use lb_core::mantle::ops::channel::ChannelId;
+use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
+use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
+// internal
+use common::{PricesContractInfo, RegisterContractInfo, TimeInfo};
+use crate::indexer::lon::{AttestedPrice, PriceObservation};
+use crate::prices_contract::publish_attested_price;
+use crate::register_contract::fetch_registered;
 
 pub mod lon {
     include!(concat!(env!("OUT_DIR"), "/lon.rs"));
@@ -29,6 +33,7 @@ pub struct Indexer {
     channels_rx: watch::Receiver<HashSet<ChannelId>>,
     active_workers: HashMap<ChannelId, JoinHandle<()>>,
     feed_workers: HashMap<String, mpsc::Sender<(ChannelId, PriceObservation)>>,
+    pc_info: PricesContractInfo,
 }
 
 impl Indexer {
@@ -39,6 +44,7 @@ impl Indexer {
         node_auth_password: Option<String>,
         time_rx: watch::Receiver<Option<TimeInfo>>,
         channels_rx: watch::Receiver<HashSet<ChannelId>>,
+        pc_info: PricesContractInfo,
     ) -> anyhow::Result<Self> {
         let node_url = Url::parse(node_endpoint)?;
         Ok(Self {
@@ -50,6 +56,7 @@ impl Indexer {
             active_workers: HashMap::new(),
             // TODO: maybe create feed workers for some known price id
             feed_workers: HashMap::new(),
+            pc_info
         })
     }
 
@@ -132,8 +139,9 @@ impl Indexer {
                             let (worker_tx, worker_rx) = mpsc::channel(100);
                             let cfg = PriceFeedWorkerConfig {
                                 feed_id, round_length: 1, quorum_threshold: 1 };
+                            let pc_info = self.pc_info.clone();
                             let _worker_handle = tokio::spawn(async move {
-                                price_feed_worker(cfg, channels_rx, worker_rx, time_info_rx).await
+                                price_feed_worker(cfg, channels_rx, worker_rx, time_info_rx, pc_info).await
                             });
                             entry.insert(worker_tx.clone());
                             worker_tx
@@ -151,8 +159,9 @@ impl Indexer {
                         let (worker_tx, worker_rx) = mpsc::channel(100);
                         let cfg = PriceFeedWorkerConfig {
                             feed_id, round_length: 1, quorum_threshold: 1 };
+                        let pc_info = self.pc_info.clone();
                         let _worker_handle = tokio::spawn(async move {
-                            price_feed_worker(cfg, channels_rx, worker_rx, time_info_rx).await
+                            price_feed_worker(cfg, channels_rx, worker_rx, time_info_rx, pc_info).await
                         });
                         self.feed_workers.insert(price_obs.feed_id.clone(), tx.clone());
                         // Retry on the send on the newly created feed_worker
@@ -239,7 +248,7 @@ async fn price_feed_worker(
     channels_rx: watch::Receiver<HashSet<ChannelId>>,
     mut price_obs_rx: mpsc::Receiver<(ChannelId, PriceObservation)>,
     mut time_rx: watch::Receiver<Option<TimeInfo>>,
-
+    pc_info: PricesContractInfo,
 ) {
     info!("Started feed worker for {}", cfg.feed_id);
 
@@ -307,8 +316,9 @@ async fn price_feed_worker(
                         info!("[Feed {}] Attested round {}: Price {}, Count {}",
                               cfg.feed_id, current_round, attested_price.price, obs_count);
 
-
-
+                        if let Err(e) = publish_attested_price(&pc_info, attested_price).await {
+                            error!("Error while publishing attested price: {}", e);
+                        }
 
                     } else {
                         warn!("[Feed {}] Round {} missed quorum ({} < {})",
@@ -371,9 +381,3 @@ fn compute_median(mut prices: Vec<i64>) -> i64 {
     }
 }
 
-/*
-async fn mock_query_contract_for_channels() -> anyhow::Result<Vec<ChannelId>> {
-    // TODO
-    Ok(vec![])
-}
-*/
