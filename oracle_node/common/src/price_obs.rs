@@ -7,7 +7,7 @@ use rust_decimal::prelude::FromPrimitive;
 // internal
 use crate::{BinancePriceEvent, RedstonePriceEvent, HermesPriceEvent};
 
-const PRICE_OBSERVATION_DECIMAL: u32 = 6;
+pub const PRICE_OBSERVATION_DECIMAL: u32 = 6;
 const PRICE_OBSERVATION_DECIMAL_PYTH: i32 = - (PRICE_OBSERVATION_DECIMAL as i32);
 
 #[derive(Debug, Clone)]

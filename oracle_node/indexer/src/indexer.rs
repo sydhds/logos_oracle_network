@@ -16,7 +16,7 @@ use lb_core::mantle::ops::channel::ChannelId;
 use logos_blockchain_zone_sdk::adapter::NodeHttpClient;
 use logos_blockchain_zone_sdk::indexer::ZoneIndexer;
 // internal
-use common::{PricesContractInfo, RegisterContractInfo, TimeInfo};
+use common::{PricesContractInfo, RegisterContractInfo, TimeInfo, PRICE_OBSERVATION_DECIMAL};
 use crate::indexer::lon::{AttestedPrice, PriceObservation};
 use crate::prices_contract::publish_attested_price;
 use crate::register_contract::fetch_registered;
@@ -328,17 +328,19 @@ async fn price_feed_worker(
                         // Extract just the integer prices for median calculation
                         let prices: Vec<i64> = current_round_observations
                             .iter()
-                            .map(|obs| obs.price)
+                            .filter_map(|obs| {
+                                if obs.decimals == PRICE_OBSERVATION_DECIMAL {
+                                    Some(obs.price)
+                                } else { None }
+                            })
                             .collect();
 
-                        let attested_median = compute_median(prices);
+                        if prices.len() != current_round_observations.len() {
+                            warn!("Found some price observations with invalid decimals, skipping them...");
+                            continue;
+                        }
 
-                        // Assuming all valid obs have the same decimals, grab from the first
-                        // TODO: filter if some the required decimals
-                        let decimals = current_round_observations
-                            .first()
-                            .map(|o| o.decimals)
-                            .unwrap_or(6); // TODO: no hardcoded value
+                        let attested_median = compute_median(prices);
 
                         let feed_id: [u8; 32] = {
                             let r = Sha256::digest(cfg.feed_id.clone());
@@ -348,7 +350,7 @@ async fn price_feed_worker(
                         let attested_price = AttestedPrice {
                             feed_id: feed_id.to_vec(),
                             price: attested_median,
-                            decimals,
+                            decimals: PRICE_OBSERVATION_DECIMAL,
                             valid_count: obs_count as u32,
                             round: current_round as i64,
                             confidence: 0, // TODO: Implement 1.4826 * MAD
@@ -389,7 +391,6 @@ async fn price_feed_worker(
                         }
 
                         info!("[Feed {}] processing valid observation: {}", cfg.feed_id, obs.price);
-                        // TODO: mean computing...
                         current_round_observations.push(obs);
                     }
                     Ok(None) => {

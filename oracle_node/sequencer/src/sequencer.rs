@@ -55,13 +55,9 @@ impl Sequencer {
 
     pub(crate) fn new(
         node_endpoint: &str,
-        oracle_key_path: PathBuf,
-        signing_key_path: PathBuf,
         node_auth_username: Option<String>,
         node_auth_password: Option<String>,
-        // queue_file: &str,
         checkpoint_path: PathBuf,
-        // channel_path: &str,
         price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
         price_feed: String,
         oracle_signing_key: Ed25519Key,
@@ -92,11 +88,9 @@ impl Sequencer {
             sequencer,
             client,
             state: InMemoryZoneState::default(),
-            // queue_file: queue_file.to_owned(),
             checkpoint_path,
             price_map,
             price_feed,
-            // oracle_pubkey
             oracle_channel_keypair: signing_key
         })
     }
@@ -153,19 +147,6 @@ impl Sequencer {
                     continue
                 };
 
-                // store it
-                // let Ok(prices_latest_json) = serde_json::to_string(price_latest) else { continue };
-                // TODO: convert price_latest into PriceObservation
-                info!("price_latest: {:?}", price_latest);
-                /*
-                let scaled_pyth_price = Price {
-                    price: price_latest.price.price.parse::<i64>().unwrap(),
-                    conf: price_latest.price.conf.parse::<u64>().unwrap(),
-                    expo: price_latest.price.expo,
-                    publish_time: price_latest.price.publish_time,
-                }.scale_to_exponent(-6).expect("Price exceeds maximum representable bounds for target exponent");
-                */
-
                 let obs = {
                     round = round.saturating_add(1);
                     let mut obs = PriceObservation {
@@ -186,8 +167,8 @@ impl Sequencer {
                     to_hash.extend(obs.round.to_le_bytes().as_slice());
                     to_hash.extend(obs.timestamp.to_le_bytes().as_slice());
                     to_hash.extend(obs.oracle_id.clone());
-                    let msg_hash = sha256d::Hash::hash(to_hash.as_slice());
-                    let msg = secp256k1::Message::from_digest(msg_hash.to_byte_array());
+                    // let msg_hash = sha256d::Hash::hash(to_hash.as_slice());
+                    // let msg = secp256k1::Message::from_digest(msg_hash.to_byte_array());
                     // Generate the BIP-340 Schnorr Signature
                     // let schnorr_sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
                     // obs.signature = schnorr_sig.serialize().to_vec();
@@ -217,7 +198,7 @@ impl Sequencer {
                 }
 
                 // Wait for 1 minutes between 2 prices update
-                info!("Sequencer waiting...");
+                debug!("Sequencer waiting...");
                 interval.tick().await;
             }
 
@@ -273,9 +254,7 @@ fn handle_event(
 fn save_checkpoint(path: &Path, checkpoint: &SequencerCheckpoint) -> anyhow::Result<()> {
     let data = serde_json::to_vec(checkpoint)
         .context(format!("Failed to serialize checkpoint: {:?}", checkpoint))?;
-        // .expect("failed to serialize checkpoint");
     fs::write(path, data)
         .context(format!("Failed to write checkpoint to {}", path.display()))?;
-        // .expect("failed to write checkpoint file");
     Ok(())
 }
