@@ -6,16 +6,9 @@ use std::sync::Arc;
 // third-party
 use anyhow::Context;
 use dashmap::DashMap;
-use rand::Rng;
 use url::Url;
 use prost::Message;
-use secp256k1::{
-    Keypair,
-    Secp256k1,
-};
-use secp256k1::hashes::{
-    Hash, sha256d};
-use tracing::{info, debug, error};
+use tracing::{info, debug, error, warn};
 use bytes::Bytes;
 // third-party - logos
 use logos_blockchain_zone_sdk::{
@@ -31,12 +24,13 @@ use lb_core::mantle::ops::channel::{
     ChannelId,
     inscribe::{Inscription, MAX_BYTES},
 };
-use lb_key_management_system_service::keys::{ED25519_SECRET_KEY_SIZE, Ed25519Key};
+use lb_key_management_system_service::{
+    keys::Ed25519Key,
+    keys::secured_key::SecuredKey
+};
 // internal
 use crate::zone_state::InMemoryZoneState;
 use common::PartialPriceObservation;
-use lb_core::codec::SerializeOp;
-use lb_key_management_system_service::keys::secured_key::SecuredKey;
 use crate::lon::PriceObservation;
 
 pub struct Sequencer {
@@ -46,8 +40,6 @@ pub struct Sequencer {
     pub checkpoint_path: PathBuf,
     price_map: Arc<DashMap<String, VecDeque<PartialPriceObservation>>>,
     price_feed: String,
-    // oracle pubk
-    // oracle_pubkey: Keypair,
     oracle_channel_keypair: Ed25519Key
 }
 
@@ -65,11 +57,6 @@ impl Sequencer {
     ) -> anyhow::Result<Self> {
 
         let checkpoint = None;
-
-        // let oracle_pubkey = generate_oracle_id(oracle_key_path.as_path())?;
-
-        // let signing_key = load_or_create_signing_key(signing_key_path.as_path())?;
-        // let channel_id = ChannelId::from(signing_key.public_key().to_bytes());
         let signing_key = oracle_signing_key;
         let channel_id = oracle_channel_id;
 
@@ -103,18 +90,15 @@ impl Sequencer {
 
         let price_map = self.price_map.clone();
         let price_feed = self.price_feed.clone();
-        // let keypair = self.oracle_pubkey.clone();
-        // let pubk = keypair.public_key();
-
         let oracle_channel_keypair = self.oracle_channel_keypair.clone();
-        let oracle_channel_pubkey = oracle_channel_keypair.public_key();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_mins(1));
 
             // Wait for sequencer to be ready
             info!("Waiting for sequencer to be ready...");
-            let ready_rx = sequencer_client.subscribe_ready();
+            let _ready_rx = sequencer_client.subscribe_ready();
+            // TODO / FIXME
             /*
             info!("Waiting for sequencer to be ready 2...");
             let _unused = tokio::time::timeout(
@@ -128,7 +112,7 @@ impl Sequencer {
             drop(_unused);
             */
 
-            info!("Sequencer ready, loop...");
+            debug!("Sequencer ready, loop...");
             let mut round: i64 = 1000;
 
             loop {
@@ -155,7 +139,7 @@ impl Sequencer {
                         decimals: price_latest.decimals,
                         round, // TODO: need Logos RPC doc
                         timestamp: price_latest.timestamp,
-                        oracle_id: oracle_channel_pubkey.to_bytes().to_vec(),
+                        oracle_id: oracle_channel_keypair.public_key().to_bytes().to_vec(),
                         signature: vec![],
                         membership_proof: vec![], // TODO: need LEZ register contract
                     };
@@ -167,17 +151,19 @@ impl Sequencer {
                     to_hash.extend(obs.round.to_le_bytes().as_slice());
                     to_hash.extend(obs.timestamp.to_le_bytes().as_slice());
                     to_hash.extend(obs.oracle_id.clone());
-                    // let msg_hash = sha256d::Hash::hash(to_hash.as_slice());
-                    // let msg = secp256k1::Message::from_digest(msg_hash.to_byte_array());
-                    // Generate the BIP-340 Schnorr Signature
-                    // let schnorr_sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &keypair);
-                    // obs.signature = schnorr_sig.serialize().to_vec();
-                    // TODO / FIXME: spec requires BIP-340 Schnorr Signature
-                    // TODO: no unwrap
-                    let sig = oracle_channel_keypair.sign(&Bytes::from(to_hash)).unwrap();
-                    obs.signature = sig.to_bytes().to_vec();
-                    debug!("price observation: {:?}", obs);
-                    obs
+                    // SPECDIF: current impl use sequencer.key (ED25519) to sign the PriceObservation
+                    //          spec requires to generate a BIP-340 Schnorr sig
+                    match oracle_channel_keypair.sign(&Bytes::from(to_hash)) {
+                        Ok(sig) => {
+                            obs.signature = sig.to_bytes().to_vec();
+                            debug!("price observation: {:?}", obs);
+                            obs
+                        },
+                        Err(e) => {
+                            warn!("Unable to sign price observation: {}", e);
+                            continue;
+                        }
+                    }
                 };
 
                 let payload_bytes = obs.encode_to_vec();
@@ -214,12 +200,14 @@ impl Sequencer {
 
 }
 
+/*
 fn generate_oracle_id(_path: &Path) -> anyhow::Result<Keypair> {
     let secp = Secp256k1::new();
     let mut rng = rand::thread_rng();
     let keypair = Keypair::new(&secp, &mut rng);
     Ok(keypair)
 }
+*/
 
 #[derive(Debug, thiserror::Error)]
 pub enum SequencerError {

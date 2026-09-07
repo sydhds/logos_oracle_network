@@ -15,7 +15,7 @@ pub struct PartialPriceObservation {
     pub feed_id: String,
     pub feed_id_provider: String,
     pub price: i64,
-    pub decimals: i32,
+    pub decimals: u32,
     pub timestamp: i64,
 }
 
@@ -30,7 +30,7 @@ impl TryFrom<(String, BinancePriceEvent)> for PartialPriceObservation {
             feed_id: feed_id_normalized,
             feed_id_provider: event.symbol,
             price: scaled_i64,
-            decimals: PRICE_OBSERVATION_DECIMAL as i32,
+            decimals: PRICE_OBSERVATION_DECIMAL,
             timestamp: event.event_time.try_into()?,
         })
     }
@@ -49,7 +49,7 @@ impl TryFrom<(String, RedstonePriceEvent)> for PartialPriceObservation {
             feed_id: feed_id_normalized,
             feed_id_provider: event.symbol,
             price: scaled_i64,
-            decimals: PRICE_OBSERVATION_DECIMAL as i32,
+            decimals: PRICE_OBSERVATION_DECIMAL,
             timestamp: event.timestamp.try_into()?,
         })
     }
@@ -80,7 +80,7 @@ impl TryFrom<(String, HermesPriceEvent)> for PartialPriceObservation {
             feed_id: feed_id_normalized,
             feed_id_provider: price_latest.id,
             price: scaled_pyth_price.price,
-            decimals: PRICE_OBSERVATION_DECIMAL as i32,
+            decimals: PRICE_OBSERVATION_DECIMAL,
             timestamp: price_latest.price.publish_time,
         })
     }

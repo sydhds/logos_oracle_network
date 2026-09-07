@@ -112,6 +112,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let mut set = JoinSet::new();
     set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
 
+    // SPECDIF: only 1 price source - spec requires at least 3 sources
     match provider {
         "binance" => {
             // Binance uses: "btcusdt"
