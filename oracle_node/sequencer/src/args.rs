@@ -36,13 +36,13 @@ pub struct SequencerArgs {
     )]
     pub key_path: PathBuf,
 
-    /// Path to the signing key file (created if it doesn't exist)
-    #[arg(
-        long,
-        default_value = "oracle.key",
-        env = "SEQUENCER_ORACLE_SIGNING_KEY_PATH"
-    )]
-    pub oracle_key_path: PathBuf,
+    // /// Path to the signing key file (created if it doesn't exist)
+    // #[arg(
+    //     long,
+    //     default_value = "oracle.key",
+    //     env = "SEQUENCER_ORACLE_SIGNING_KEY_PATH"
+    // )]
+    // pub oracle_key_path: PathBuf,
 
     /// Basic auth username for node endpoint
     #[arg(long, env = "SEQUENCER_NODE_AUTH_USERNAME")]

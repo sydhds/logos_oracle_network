@@ -46,7 +46,7 @@ use lb_key_management_system_service::keys::{Ed25519Key, ED25519_SECRET_KEY_SIZE
 async fn main() {
     let args = SequencerArgs::parse();
     if let Err(err) = run(args).await {
-        error!("Error: {:#?}", err);
+        error!("[Main] error: {:#?}", err);
     }
 }
 
@@ -57,8 +57,8 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     info!("Starting oracle node sequencer...");
     debug!("args: {:?}", &args);
 
-    info!("Try to read signing key path: {}...", args.key_path.display());
-    let oracle_keypair = load_or_create_signing_key(args.key_path.as_path())?;
+    let key_full_path = args.data_folder.join(&args.key_path);
+    let oracle_keypair = load_or_create_signing_key(key_full_path.as_path())?;
     let oracle_pubk = oracle_keypair.public_key();
 
     let cfg = parse_provider_config(args.provider_config.as_path())
@@ -78,8 +78,6 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     let mut sequencer = Sequencer::new(
         &args.node_rest_url,
-        args.data_folder.join(&args.oracle_key_path),
-        args.data_folder.join(&args.key_path),
         args.node_auth_username,
         args.node_auth_password,
         args.data_folder.join(&args.checkpoint_path),
@@ -103,7 +101,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
 
     // Register (or check it is already registered) to oracle_register contract
     {
-        let file = std::fs::File::open(args.register_contract_config.as_path())
+        let file = fs::File::open(args.register_contract_config.as_path())
             .context(format!("Reading {}", args.register_contract_config.as_path().display()))?;
         let reader = std::io::BufReader::new(file);
         let cfg = serde_json::from_reader::<_, RegisterContractInfo>(reader)?;
@@ -114,6 +112,7 @@ pub async fn run(args: SequencerArgs) -> anyhow::Result<()> {
     let mut set = JoinSet::new();
     set.spawn(async move { time_info_poll( args.node_rest_url.clone(), poll_interval, time_info_tx).await } );
 
+    // SPECDIF: only 1 price source - spec requires at least 3 sources
     match provider {
         "binance" => {
             // Binance uses: "btcusdt"
@@ -222,7 +221,7 @@ fn parse_provider_config(json_cfg: &Path) -> anyhow::Result<PriceProviderConfig>
         pub feeds: HashMap<NormalizedFeed, HashMap<ProviderName, ProviderFeed>>,
     }
 
-    let json_reader = std::fs::File::open(json_cfg)?;
+    let json_reader = fs::File::open(json_cfg)?;
     let cfg_raw: PriceProviderConfigRaw = serde_json::from_reader(json_reader)?;
 
     let cfg = {
@@ -253,8 +252,10 @@ fn parse_provider_config(json_cfg: &Path) -> anyhow::Result<PriceProviderConfig>
 
 fn load_or_create_signing_key(path: &Path) -> anyhow::Result<Ed25519Key> {
     if path.exists() {
-        let key_bytes = fs::read(path).context("failed to read key file")?;
-        assert_eq!(key_bytes.len(), ED25519_SECRET_KEY_SIZE, "invalid key file: expected {} bytes, got {}", ED25519_SECRET_KEY_SIZE, key_bytes.len());
+        let key_bytes = fs::read(path)
+            .context(format!("failed to read key file {}", path.display()))?;
+        assert_eq!(key_bytes.len(), ED25519_SECRET_KEY_SIZE,
+                   "invalid key file: expected {} bytes, got {}", ED25519_SECRET_KEY_SIZE, key_bytes.len());
         let key_array: [u8; ED25519_SECRET_KEY_SIZE] = key_bytes
             .as_slice()
             .try_into()
