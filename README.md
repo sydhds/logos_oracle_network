@@ -158,4 +158,22 @@ Note:
   * `export CARGO_TARGET_DIR=/home/ubuntu/local_target/oracle_node`
   * `RUST_BACKTRACE=1 RUST_LOG="debug,hyper_util=info,rustls=info,h2=info" cargo run -p indexer`
 
+## Swap demo contract
+
+* `make build`
+* `cp -v /home/ubuntu/local_target/swap_demo/riscv32im-risc0-zkvm-elf/docker/swap_demo.bin methods/guest/target/riscv32im-risc0-zkvm-elf/docker/swap_demo.bin` 
+* `spel generate-idl methods/guest/src/bin/swap_demo.rs > swap_demo-idl.json`
+
+* `make deploy`
+* `spel initialize --token-program-id 0,0...`
+  * token program id can computed using: `lon_helpers` (FIXME / TODO: commit or find a better place)
+    * `cd ../oracle_node` and `cargo run -p common --example print_program_id -- __HEX_STR__` (use hex string when program has been deployed) 
+
+* init pool:
+  * `cargo run -p pda_seed_tool -- __TOKEN_DEF_ACCOUNT__`
+  * `spel initialize-pool --token-definition-account H85iyJ22t5gnB4bQnvgXmwKPQuuqe1KNxpyVDtLXtv8N --pool-pda-seed 99a4dafef6318dde772e6aeff09ab184bd517556260398e67d1bec3509f4c2b4 --pool-account 3TMVTWLozksatMSMHVeX8FnwNGMqcxncBUsG138KYnfu`
+
+* swap:
+  * `spel swap --amount 10 --to BYGSXyvQE28qCJstegnJWXwoxevwL48AsN7KZbgnG47U ...`
+
 
